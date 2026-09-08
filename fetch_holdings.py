@@ -53,6 +53,16 @@ PROXY = {
     "valueup": "495050",       # RISE 코리아밸류업
     "fn_sobujang": "455850",   # SOL AI반도체소부장
     "fn_dividend": "161510",   # PLUS 고배당주
+    "fn_aitop2_sol": "0167A0", # SOL AI반도체TOP2플러스
+    "wise_battery": "305540",  # TIGER 2차전지테마
+    "is_power": "487240",      # KODEX AI전력핵심설비
+    "kedi_power": "0117V0",    # TIGER 코리아AI전력기기TOP3플러스
+    "fn_semitop10_lev": "488080",  # TIGER 반도체TOP10레버리지
+    "kospi200_it_lev": "243880",   # TIGER 200IT레버리지
+    "kosdaq150_lev": "233740",     # KODEX 코스닥150레버리지
+    "kospi200_lev": "122630",      # KODEX 레버리지
+    "kospi200_tiger": "102110",    # TIGER 200
+    "kosdaq150_tiger": "232080",   # TIGER 코스닥150
 }
 CASH = ("현금", "예금", "설정현금", "USD", "달러")
 

@@ -20,6 +20,7 @@ def main():
     kb = json.loads((DATA / "methodology.json").read_text(encoding="utf-8"))
     hold = json.loads((DATA / "holdings.json").read_text(encoding="utf-8"))
     semi = json.loads((DATA / "krx_semi_rebal.json").read_text(encoding="utf-8")) if (DATA / "krx_semi_rebal.json").exists() else None
+    flows = json.loads((DATA / "flows.json").read_text(encoding="utf-8")) if (DATA / "flows.json").exists() else None
     keys = ["code", "name", "sector", "sector_src", "avg_mcap", "avg_trdval", "n_days", "mcap_rank", "n_exist", "n_sector",
             "rank_ratio", "cum_share", "trd_rank", "liq_ok", "primary", "status", "mktcap_now", "listing_date", "mcap15", "note",
             "is_cur", "cur_weight", "fif"]
@@ -34,7 +35,7 @@ def main():
                 "trd_rank", "liq_ok", "mktcap_now", "fif", "fif_src", "w_cur_adj", "w_target", "delta", "capped", "flow_by_etf", "flow_total", "adv20", "adv_mult", "w_cur_etf"]
         for sc in semi["scenarios"].values():
             sc["rows"] = [{k: r.get(k) for k in keep if r.get(k) is not None} for r in sc["rows"] if r.get("is_cur") or r.get("in_midlarge")]
-    payload = {"analysis": a, "etfs": etfs, "kb": kb, "members": members, "semi": semi,
+    payload = {"analysis": a, "etfs": etfs, "kb": kb, "members": members, "semi": semi, "flows": flows,
                "proxy": {k: {"etf": v["etf_code"], "date": v["date"], "n": len(v["rows"])} for k, v in hold.items()}}
     html = (ROOT / "template.html").read_text(encoding="utf-8")
     js = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
