@@ -17,6 +17,9 @@ if ($LASTEXITCODE -ne 0) { Write-Host "fetch_holdings failed"; exit 1 }
 Write-Host "[3/5] analysis..."
 python analyze.py
 if ($LASTEXITCODE -ne 0) { Write-Host "analyze failed"; exit 1 }
+python fetch_daily_range.py --since 20250501 --wics 반도체와반도체장비
+python rebal_flow.py
+if ($LASTEXITCODE -ne 0) { Write-Host "rebal_flow failed"; exit 1 }
 
 Write-Host "[4/5] build site..."
 python methodology_kb.py

@@ -38,6 +38,8 @@ PROXY = {
     "fn_top10": "292150",      # TIGER 코리아TOP10
     "msci_korea": "310970",    # TIGER MSCI Korea TR
     "krx_semi": "091160",      # KODEX 반도체
+    "krx_semi_tiger": "091230",  # TIGER 반도체
+    "krx_semi_lev": "494310",  # KODEX 반도체레버리지
     "fn_semitop10": "396500",  # TIGER 반도체TOP10
     "fn_aitop2": "395160",     # KODEX AI반도체TOP2플러스
     "fn_ksemi": "395270",      # HANARO Fn K-반도체
