@@ -1,0 +1,6 @@
+data/market.sqlite
+data/*.log
+dist/.git/
+__pycache__/
+*.pyc
+update.log

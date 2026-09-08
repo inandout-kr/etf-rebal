@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ETF·BM 편출입 트래커</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2230;--muted:#6b7280;--line:#e5e7eb;--accent:#1f4fd1;--up:#d6363c;--dn:#1d6fd1;--warn:#b45309;--ok:#15803d;--chip:#eef2ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Pretendard Variable",Pretendard,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;font-size:14px;line-height:1.5}
+a{color:var(--accent);text-decoration:none}
+header{background:#101828;color:#fff;padding:18px 24px}
+header h1{margin:0;font-size:20px;font-weight:700;letter-spacing:-.2px}
+header .sub{color:#b8c0d0;font-size:12px;margin-top:4px}
+nav{display:flex;gap:4px;flex-wrap:wrap;background:#fff;border-bottom:1px solid var(--line);padding:6px 16px;position:sticky;top:0;z-index:5}
+nav button{border:0;background:transparent;padding:8px 12px;border-radius:8px;cursor:pointer;font:inherit;font-weight:600;color:var(--muted)}
+nav button.on{background:var(--chip);color:var(--accent)}
+main{max-width:1380px;margin:0 auto;padding:16px}
+section.tab{display:none}section.tab.on{display:block}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card h3{margin:0 0 8px;font-size:15px}
+.card h4{margin:12px 0 6px;font-size:13px;color:var(--muted);font-weight:600}
+.kpi{display:flex;flex-direction:column;gap:2px}
+.kpi .v{font-size:24px;font-weight:700}
+.kpi .l{color:var(--muted);font-size:12px}
+.badge{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;background:#eef2f7;color:#334155;white-space:nowrap}
+.badge.up{background:#fde8e8;color:var(--up)}.badge.dn{background:#e3edfb;color:var(--dn)}.badge.warn{background:#fef3c7;color:var(--warn)}.badge.ok{background:#dcfce7;color:var(--ok)}.badge.acc{background:var(--chip);color:var(--accent)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th{position:sticky;top:0;background:#f8fafc;color:#475569;font-weight:600;font-size:12px}
+td:first-child,th:first-child,td.l,th.l{text-align:left}
+.tbl{overflow:auto;max-height:70vh;border:1px solid var(--line);border-radius:10px}
+.tbl.short{max-height:420px}
+tr:hover td{background:#f8fafc}
+.muted{color:var(--muted)}.small{font-size:12px}
+.note{background:#f8fafc;border-left:3px solid #cbd5e1;padding:8px 12px;border-radius:6px;font-size:12.5px;color:#334155;margin:8px 0}
+input[type=text],input[type=number],select{font:inherit;padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.dday{font-weight:700;color:var(--accent)}
+.pos{color:var(--up)}.neg{color:var(--dn)}
+.ev{display:grid;grid-template-columns:96px 1fr;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line)}
+.ev .d{font-weight:700}.ev .i{font-weight:600}.ev .e{color:#334155}.ev .s{color:var(--muted);font-size:11.5px}
+details summary{cursor:pointer;font-weight:600;color:var(--accent);margin:8px 0}
+.kb dt{font-weight:700;margin-top:8px}.kb dd{margin:2px 0 0 0;color:#334155}
+.kb ul{margin:2px 0 0 18px;padding:0}
+footer{color:var(--muted);font-size:12px;text-align:center;padding:24px}
+@media (max-width:700px){th,td{padding:5px 6px}header{padding:14px 16px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>ETF·BM 편출입 트래커 <span class="badge acc" style="vertical-align:middle">공식 방법론 기준</span></h1>
+  <div class="sub" id="hdr-sub"></div>
+</header>
+<nav id="nav">
+  <button data-t="dash" class="on">대시보드</button>
+  <button data-t="cal">일정</button>
+  <button data-t="k200">코스피 200</button>
+  <button data-t="kq150">코스닥 150</button>
+  <button data-t="top">KOSPI100·TOP·테마</button>
+  <button data-t="adhoc">수시·특례·MSCI</button>
+  <button data-t="etf">ETF·BM 방법론</button>
+  <button data-t="search">종목 검색</button>
+</nav>
+<main>
+  <section class="tab on" id="tab-dash"></section>
+  <section class="tab" id="tab-cal"></section>
+  <section class="tab" id="tab-k200"></section>
+  <section class="tab" id="tab-kq150"></section>
+  <section class="tab" id="tab-top"></section>
+  <section class="tab" id="tab-adhoc"></section>
+  <section class="tab" id="tab-etf"></section>
+  <section class="tab" id="tab-search"></section>
+</main>
+<footer>데이터: 네이버금융·다음금융·WISE(섹터)·wisereport(ETF PDF) 무료 공개 데이터 / 방법론: KRX·FnGuide·MSCI 공식 문서. 투자판단의 참고자료이며 정확성을 보장하지 않습니다.</footer>
+<script id="data" type="application/json">/*__DATA__*/null</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const A = D.analysis, KB = D.kb.indexes, EIK = D.kb.etf_index_key;
+const $ = s => document.querySelector(s);
+const fmt = {
+  eok(v){ if(v==null) return '-'; const e=v/1e8; return e>=10000? (e/10000).toFixed(e>=100000?0:1)+'조' : Math.round(e).toLocaleString()+'억'; },
+  eokv(e){ if(e==null) return '-'; return e>=10000? (e/10000).toFixed(1)+'조' : Math.round(e).toLocaleString()+'억'; },
+  pct(v,d=1){ return v==null?'-':(v*100).toFixed(d)+'%'; },
+  n(v,d=0){ return v==null?'-':Number(v).toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}); },
+  date(s){ if(!s) return '-'; s=String(s); return s.length===8? `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6)}`: s; },
+};
+const esc = s => String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const statusBadge = s => { if(!s) return ''; if(s.startsWith('신규편입')) return `<span class="badge up">${esc(s)}</span>`; if(s.startsWith('편출')) return `<span class="badge dn">${esc(s)}</span>`; if(s.startsWith('유지')) return `<span class="badge ok">${esc(s)}</span>`; if(s==='산업군제외') return `<span class="badge warn">${esc(s)}</span>`; return `<span class="badge">${esc(s)}</span>`; };
+const nv = s => `<a href="https://finance.naver.com/item/main.naver?code=${s}" target="_blank" rel="noopener">${s}</a>`;
+
+/* ---------- header ---------- */
+$('#hdr-sub').textContent = `생성 ${A.generated} · 시세 기준 ${fmt.date(A.last_daily)} · ETF PDF 기준 ${D.proxy.kospi200.date} · USD/KRW ${fmt.n(A.usdkrw,1)}`;
+
+/* ---------- 패시브 플로우 추정 ---------- */
+function flowModel(idx, aumEok){
+  const sel = idx.all.filter(u => u.status && (u.status.startsWith('유지')||u.status.startsWith('신규편입')));
+  const fifs = idx.all.filter(u=>u.is_cur && u.fif).map(u=>u.fif).sort((a,b)=>a-b);
+  const fifDef = fifs.length? fifs[Math.floor(fifs.length/2)] : 0.6;
+  const w = u => (u.mktcap_now||0) * (u.fif || fifDef);
+  const tot = sel.reduce((s,u)=>s+w(u),0);
+  const wDel = u => (u.cur_weight && u.cur_weight>0)? u.cur_weight/100 : w(u)/tot;
+  return { fifDef, weight:u=> w(u)/tot, weightDel:wDel, flowAdd:u=> aumEok*(w(u)/tot), flowDel:u=> aumEok*wDel(u), advDays:(flowEok,u)=> u.avg_trdval? (flowEok*1e8)/u.avg_trdval : null };
+}
+
+/* ---------- 대시보드 ---------- */
+function renderDash(){
+  const ev = A.events.slice(0,14);
+  const k=A.kospi200, q=A.kosdaq150, t=A.fn_top10, s=A.fn_semitop10;
+  const capAlerts = A.cap_monitor.filter(c=>c.top.some(x=>x.over));
+  const ipo = A.ipo_monitor.filter(x=>x.eligible);
+  $('#tab-dash').innerHTML = `
+  <div class="grid g3">
+    <div class="card kpi"><div class="v">${k.adds.length} <span class="pos">IN</span> / ${k.dels.length} <span class="neg">OUT</span></div><div class="l">코스피 200 · 12월 정기변경 예상 (적용 ${k.window.apply}) · 심사기간 ${fmt.date(k.window.period_start)}~${fmt.date(k.window.period_end)} 중 ${fmt.date(k.data_through)}까지 집계</div></div>
+    <div class="card kpi"><div class="v">${q.adds.length} <span class="pos">IN</span> / ${q.dels.length} <span class="neg">OUT</span></div><div class="l">코스닥 150 · 12월 정기변경 예상 (적용 ${q.window.apply})</div></div>
+    <div class="card kpi"><div class="v">${t.adds.length} <span class="pos">IN</span> / ${t.dels.length} <span class="neg">OUT</span></div><div class="l">FnGuide TOP10 (TIGER 코리아TOP10) · 9/14 적용 예상</div></div>
+    <div class="card kpi"><div class="v">${s.adds.length} <span class="pos">IN</span> / ${s.dels.length} <span class="neg">OUT</span></div><div class="l">FnGuide 반도체 TOP10 · 선정 9/30 → 10/12 적용</div></div>
+    <div class="card kpi"><div class="v">${capAlerts.length}</div><div class="l">30% 캡 트리거 초과 지수 (수시 비중개편 후보)</div></div>
+    <div class="card kpi"><div class="v">${ipo.length}</div><div class="l">신규상장 특례편입 요건 충족 종목 (시총 순위 기준)</div></div>
+  </div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card"><h3>다가오는 이벤트</h3>${ev.map(e=>`<div class="ev"><div><div class="d">${e.date}</div><div class="dday">D-${e.dday}</div></div><div><div class="i">${esc(e.index)}</div><div class="e">${esc(e.event)}</div><div class="s">${esc(e.etfs)} · <span class="muted">${esc(e.source)}</span></div></div></div>`).join('')}</div>
+    <div class="card"><h3>핵심 요약</h3>
+      <h4>코스피 200 편입 예상</h4><div>${k.adds.map(u=>`${esc(u.name)} <span class="muted small">(${esc(u.sector)} ${fmt.pct(u.rank_ratio,0)})</span>`).join(', ')||'-'}</div>
+      <h4>코스피 200 편출 예상</h4><div>${k.dels.map(u=>`${esc(u.name)} <span class="muted small">(${esc(u.sector)} ${u.rank_ratio?fmt.pct(u.rank_ratio,0):esc(u.status)})</span>`).join(', ')||'-'}</div>
+      <h4>코스닥 150 편입 예상</h4><div>${q.adds.map(u=>esc(u.name)).join(', ')||'-'}</div>
+      <h4>코스닥 150 편출 예상</h4><div>${q.dels.map(u=>esc(u.name)).join(', ')||'-'}</div>
+      <h4>FnGuide TOP10</h4><div>IN: ${t.adds.map(u=>esc(u.name)).join(', ')||'-'} / OUT: ${t.dels.map(u=>esc(u.name)).join(', ')||'-'}</div>
+      <h4>반도체 TOP10</h4><div>IN: ${s.adds.map(u=>esc(u.name)).join(', ')||'-'} / OUT: ${s.dels.map(u=>esc(u.name)).join(', ')||'-'}</div>
+      <h4>KOSPI 100</h4><div>IN: ${A.kospi100.adds.map(u=>esc(u.name)).join(', ')||'-'} / OUT: ${A.kospi100.dels.map(u=>esc(u.name)).join(', ')||'-'}</div>
+      <h4>캡 트리거</h4><div>${capAlerts.map(c=>`${esc(c.name)}: ${c.top.filter(x=>x.over).map(x=>`${esc(x.name)} ${x.weight}%`).join(', ')}`).join('<br>')||'초과 없음'}</div>
+    </div>
+  </div>
+  <div class="note">괄호 안 %는 산업군 내 일평균시총 순위 ÷ 산업군 기존 구성종목수 (KOSPI200: 기존 110% 이내 유지·신규 90% 이내 편입 / KOSDAQ150: 120%·80%). 심사기간이 끝나지 않았으므로 10월 말까지 시총·거래대금 변화에 따라 달라질 수 있습니다.</div>`;
+}
+
+/* ---------- 일정 ---------- */
+function renderCal(){
+  const wrap = $('#tab-cal');
+  wrap.innerHTML = `<div class="card"><div class="row"><b>지수 이벤트 일정</b><select id="cal-kind"><option value="">전체</option><option value="정기">정기변경</option><option value="수시">수시(특례 후보일)</option></select><input type="text" id="cal-q" placeholder="지수/ETF 검색"></div><div class="tbl" id="cal-tbl"></div>
+  <div class="note">일자는 공식 방법론의 규칙(선물 최종거래일=둘째 목요일, 심사기준일=전전월 말 등)을 KRX 휴장일에 맞춰 계산한 값입니다. 발표일은 KRX가 별도 공지하므로 예시일입니다. MSCI 일정은 MSCI 공식 발표(2026-08-12) 기준입니다.</div></div>`;
+  const draw = ()=>{
+    const kind=$('#cal-kind').value, q=($('#cal-q').value||'').toLowerCase();
+    const rows = A.events.filter(e=>(!kind||e.kind===kind)&&(!q||(e.index+e.etfs+e.event).toLowerCase().includes(q)));
+    $('#cal-tbl').innerHTML = `<table><thead><tr><th class="l">일자</th><th>D-day</th><th class="l">지수</th><th class="l">이벤트</th><th class="l">관련 ETF</th><th class="l">근거</th></tr></thead><tbody>${rows.map(e=>`<tr><td>${e.date}</td><td class="dday">D-${e.dday}</td><td class="l">${esc(e.index)}</td><td class="l" style="white-space:normal">${esc(e.event)}</td><td class="l" style="white-space:normal">${esc(e.etfs)}</td><td class="l muted small" style="white-space:normal">${esc(e.source)}</td></tr>`).join('')}</tbody></table>`;
+  };
+  $('#cal-kind').onchange=draw; $('#cal-q').oninput=draw; draw();
+}
+
+/* ---------- KRX 대표지수 (K200 / KQ150) ---------- */
+function renderKrx(key, mount){
+  const idx = A[key]; const aumDef = Math.round((A.tracking_aum[key]?.total_eok||0)/1000)/10;
+  const kb = KB[key];
+  mount.innerHTML = `
+  <div class="card">
+    <h3>${esc(idx.name)} 2026년 12월 정기변경 시뮬레이션</h3>
+    <div class="row small muted">심사기준일 ${fmt.date(idx.window.ref_date)} · 심사기간 ${fmt.date(idx.window.period_start)}~${fmt.date(idx.window.period_end)} (현재 ${fmt.date(idx.data_through)}까지 집계) · 적용일 ${idx.window.apply} (선물만기 ${idx.window.expiry} 익영업일) · ${idx.window.announce} · 프록시 ETF ${idx.proxy_etf} PDF ${idx.proxy_date} 기준 현 구성 ${idx.n_current}종목 · 심사대상 ${idx.n_universe}종목</div>
+    <div class="note">${esc(idx.rules)}. <b>추종자금 가정</b>: 아래 입력값 × 예상 비중 = 패시브 매수/매도 추정액. 기본값은 해당 지수 추종 국내 ETF 순자산 합계(레버리지·커버드콜 포함, 1배 환산 안 함)이며 연기금·인덱스펀드는 제외이므로 실제 총 추종자금은 이보다 큽니다.</div>
+    <div class="row"><label>추종자금 (조원) <input type="number" id="${key}-aum" value="${aumDef}" step="0.5" style="width:90px"></label><span class="muted small">ETF 합계 ${fmt.eokv(A.tracking_aum[key]?.total_eok)} (${A.tracking_aum[key]?.etfs.length}개) · 추정 FIF 중앙값 적용</span></div>
+    <div id="${key}-tables"></div>
+  </div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card"><h3>유지 경계 종목 (순위비율 ≥ 90%, 편출 위험 순)</h3><div class="tbl short">${krxTable(idx.watch_keep, idx, null, false)}</div></div>
+    <div class="card"><h3>편입 경계 종목 (미선정 중 근접 순)</h3><div class="tbl short">${krxTable(idx.watch_new, idx, null, false)}</div></div>
+  </div>
+  <div class="grid g2" style="margin-top:12px">
+    <div class="card"><h3>산업군별 현황</h3><div class="tbl short"><table><thead><tr><th class="l">산업군</th><th>심사대상</th><th>현 구성</th><th>선정</th><th>일평균시총 합</th></tr></thead><tbody>${Object.entries(idx.sectors).map(([s,v])=>`<tr><td>${esc(s)}</td><td>${v.n_univ}</td><td>${v.n_exist}</td><td>${v.n_sel}</td><td>${fmt.eok(v.mcap)}</td></tr>`).join('')}</tbody></table></div>
+      ${idx.dropped_sectors.length?`<div class="note">산업군 시총 1% 미만으로 심사 제외: ${idx.dropped_sectors.join(', ')}</div>`:''}
+      ${idx.excluded_current.length?`<div class="note">현 구성종목 중 심사대상 제외: ${idx.excluded_current.map(x=>`${esc(x.name)}(${esc(x.why)})`).join(', ')}</div>`:''}
+    </div>
+    <div class="card"><h3>방법론 요약 (${esc(kb.doc)})</h3><dl class="kb"><dt>심사대상</dt><dd>${esc(kb.universe)}</dd><dt>산업군</dt><dd>${esc(kb.sector)}</dd><dt>선정</dt><dd><ul>${kb.selection.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></dd><dt>정기변경</dt><dd>${esc(kb.regular)}</dd><dt>수시변경</dt><dd><ul>${kb.adhoc.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></dd></dl><a href="${kb.doc_url}" target="_blank" rel="noopener">원문(KRX 지수산출방법) →</a></div>
+  </div>
+  <div class="card" style="margin-top:12px"><details><summary>전체 심사대상 종목 (${idx.all.length}) · 검색</summary><div class="row"><input type="text" id="${key}-q" placeholder="종목명/코드/산업군"><select id="${key}-f"><option value="">전체</option><option value="cur">현 구성종목</option><option value="new">비구성</option></select></div><div class="tbl" id="${key}-all"></div></details></div>`;
+  const drawMain = ()=>{
+    const aum = parseFloat($(`#${key}-aum`).value||0)*10000; const fm = flowModel(idx, aum);
+    $(`#${key}-tables`).innerHTML = `<div class="grid g2"><div><h4>편입 예상 (${idx.adds.length})</h4><div class="tbl short">${krxTable(idx.adds, idx, fm, true)}</div></div><div><h4>편출 예상 (${idx.dels.length})</h4><div class="tbl short">${krxTable(idx.dels, idx, fm, false)}</div></div></div>`;
+  };
+  const drawAll = ()=>{
+    const q=($(`#${key}-q`).value||'').toLowerCase(), f=$(`#${key}-f`).value;
+    const rows = idx.all.filter(u=>(!q||(u.name+u.code+(u.sector||'')).toLowerCase().includes(q))&&(!f||(f==='cur'?u.is_cur:!u.is_cur))).slice(0,400);
+    $(`#${key}-all`).innerHTML = krxTable(rows, idx, null, false);
+  };
+  $(`#${key}-aum`).oninput=drawMain; drawMain();
+  $(`#${key}-q`).oninput=drawAll; $(`#${key}-f`).onchange=drawAll; drawAll();
+}
+function krxTable(rows, idx, fm, isAdd){
+  const flowCol = fm? `<th>예상비중</th><th>패시브 ${isAdd?'매수':'매도'}</th><th>ADV배수</th>`:'';
+  return `<table><thead><tr><th class="l">종목</th><th class="l">산업군</th><th>일평균시총</th><th>일평균거래대금</th><th>시총순위/기존</th><th>순위비율</th><th>누적시총</th><th>유동성</th><th class="l">상태</th>${flowCol}<th>현비중</th></tr></thead><tbody>${rows.map(u=>{
+    let fc='';
+    if(fm){ const flow = isAdd? fm.flowAdd(u) : fm.flowDel(u); const w = isAdd? fm.weight(u) : fm.weightDel(u); const adv = fm.advDays(flow,u); fc=`<td>${fmt.pct(w,2)}</td><td>${fmt.eokv(flow)}</td><td>${adv==null?'-':adv.toFixed(1)+'일'}</td>`; }
+    return `<tr><td class="l">${esc(u.name)} <span class="muted small">${nv(u.code)}</span></td><td class="l">${esc(u.sector||'')}<span class="muted small"> ${u.sector_src==='WICS'?'(WICS)':u.sector_src==='수동보정'?'(보정)':''}</span></td><td>${fmt.eok(u.avg_mcap)}</td><td>${fmt.eok(u.avg_trdval)}</td><td>${u.mcap_rank??'-'}/${u.n_exist??'-'}</td><td class="${u.rank_ratio>1?'neg':''}">${fmt.pct(u.rank_ratio,0)}</td><td>${fmt.pct(u.cum_share,1)}</td><td>${u.liq_ok===false?'<span class="badge dn">미달</span>':u.liq_ok?'<span class="badge ok">충족</span>':'-'}</td><td class="l">${statusBadge(u.status)}${u.note?`<div class="muted small">${esc(u.note)}</div>`:''}</td>${fc}<td>${u.cur_weight!=null?u.cur_weight+'%':'-'}</td></tr>`;}).join('')}</tbody></table>`;
+}
+
+/* ---------- KOSPI100 / TOP / 테마 ---------- */
+function renderTop(){
+  const k1=A.kospi100, t=A.fn_top10, s=A.fn_semitop10;
+  const topTbl = (r, useFloat)=>`<div class="tbl short"><table><thead><tr><th>순위</th><th class="l">종목</th><th>시장</th><th>${useFloat?'추정 유동시총(평균)':'1개월 평균시총'}</th>${useFloat?'<th>추정FIF</th><th>단순시총(평균)</th>':''}<th>현 ETF비중</th><th class="l">상태</th></tr></thead><tbody>${r.top.map(u=>`<tr><td>${u.rank}</td><td class="l">${esc(u.name)} <span class="muted small">${nv(u.code)}</span></td><td>${u.market}</td><td>${fmt.eok(useFloat?u.avg_float_mcap:u.avg_mcap)}</td>${useFloat?`<td>${u.fif?u.fif.toFixed(2):'<span class="muted">n/a(=1.0)</span>'}</td><td>${fmt.eok(u.avg_mcap)}</td>`:''}<td>${u.cur_weight!=null?u.cur_weight+'%':'-'}</td><td class="l">${u.excluded?`<span class="badge warn">${esc(u.excluded)}</span>`:u.rank<=r.N?(u.is_cur?'<span class="badge ok">유지</span>':'<span class="badge up">신규편입</span>'):(u.is_cur?'<span class="badge dn">편출</span>':'')}</td></tr>`).join('')}</tbody></table></div>`;
+  $('#tab-top').innerHTML = `
+  <div class="card"><h3>KOSPI 100 (KODEX 코스피100) · 12월 정기변경 예상</h3><div class="small muted">KOSPI 200 정기심사 선정종목 중 일평균시총 상위 100 · 기존 120% 유지 / 신규 80% 편입 버퍼 · 30% CAP</div>
+    <div class="row"><span class="badge up">IN</span> ${k1.adds.map(u=>`${esc(u.name)}(${u.k100_rank}위)`).join(', ')||'-'} &nbsp; <span class="badge dn">OUT</span> ${k1.dels.map(u=>`${esc(u.name)}(${u.k100_rank??'-'}위${u.note?', '+esc(u.note):''})`).join(', ')||'-'}</div>
+    <details><summary>경계 구간 (70~125위)</summary><div class="tbl short"><table><thead><tr><th>순위</th><th class="l">종목</th><th>일평균시총</th><th>현 구성</th></tr></thead><tbody>${k1.border.map(u=>`<tr><td>${u.k100_rank}</td><td class="l">${esc(u.name)}</td><td>${fmt.eok(u.avg_mcap)}</td><td>${u.is_cur?'●':''}</td></tr>`).join('')}</tbody></table></div></details></div>
+  <div class="card" style="margin-top:12px"><h3>${esc(t.name)}</h3><div class="small muted">${esc(t.note)} · 데이터 ${fmt.date(t.window.start)}~${fmt.date(t.data_through)} · 프록시 PDF ${t.proxy_date}</div>
+    <div class="row"><span class="badge up">IN</span> ${t.adds.map(u=>esc(u.name)).join(', ')||'-'} &nbsp; <span class="badge dn">OUT</span> ${t.dels.map(u=>esc(u.name)).join(', ')||'-'}</div>${topTbl(t,true)}
+    <div class="note">공식 규칙(FnGuide Size/Style Methodology v2.0, 2026.02): 유동시총 상위 100 유니버스 → 선정일 기준 20영업일 유동시총 평균 상위 10 · 동일 기업집단 중간지주회사와 자회사 동시 포함 시 중간지주 제외(SK스퀘어) · 편입비중 25% 실링 · 2·8월 말 선정, 3·9월 만기 D+2 변경(비중 확정 만기일 종가).</div></div>
+  <div class="card" style="margin-top:12px"><h3>${esc(s.name)}</h3><div class="small muted">${esc(s.note)} · 데이터 ${fmt.date(s.window.start)}~${fmt.date(s.data_through)}</div>
+    <div class="row"><span class="badge up">IN</span> ${s.adds.map(u=>esc(u.name)).join(', ')||'-'} &nbsp; <span class="badge dn">OUT</span> ${s.dels.map(u=>esc(u.name)).join(', ')||'-'}</div>${topTbl(s,false)}
+    ${s.cur_not_in_universe.length?`<div class="note">현 구성종목 중 유니버스 필터 밖: ${s.cur_not_in_universe.map(x=>esc(x.name)).join(', ')} (FICS '반도체'와 WICS 분류 차이 가능)</div>`:''}</div>
+  <div class="card" style="margin-top:12px"><h3>비중상한(캡) 트리거 모니터</h3><div class="small muted">프록시 ETF PDF 상위 종목 비중 vs 방법론 트리거 (30% 초과 → 수시 비중개편). 매일 갱신 시 연속일수 판단은 별도 확인 필요.</div>
+    <div class="grid g3" style="margin-top:8px">${A.cap_monitor.map(c=>`<div class="card" style="padding:10px 12px"><b>${esc(c.name)}</b> <span class="muted small">${c.etf} · ${c.date}</span><div class="small" style="margin:4px 0">${c.top.map(x=>`<span class="badge ${x.over?'warn':''}">${esc(x.name)} ${x.weight}%</span>`).join(' ')}</div><div class="muted small">${esc(c.rule)}</div></div>`).join('')}</div></div>`;
+}
+
+/* ---------- 수시·특례·MSCI ---------- */
+function renderAdhoc(){
+  const ipo=A.ipo_monitor, m=A.msci;
+  $('#tab-adhoc').innerHTML = `
+  <div class="card"><h3>신규상장 특례편입 모니터 (최근 120일 상장)</h3><div class="small muted">KOSPI 200: 상장 후 15매매일 평균시총이 유가증권 보통주 상위 50위 이내 & 유동시총 ≥ 50위 시총×0.5 / KOSDAQ 150: 코스닥 보통주 상위 30위 이내 → 교체일 = 15매매일 경과 후 최초 도래하는 KOSPI200 선물 최근월물 최종거래일(둘째 목요일)의 다음 매매거래일. 편입 시 직전 정기변경 시총 최소 종목 제외.</div>
+    <div class="tbl short"><table><thead><tr><th class="l">종목</th><th>시장</th><th>상장일</th><th>매매일수</th><th>현재 시총</th><th>15일 평균시총</th><th>시총순위</th><th>기준</th><th class="l">판정</th></tr></thead><tbody>${ipo.map(x=>`<tr><td class="l">${esc(x.name)} <span class="muted small">${nv(x.code)}</span></td><td>${x.market}</td><td>${x.listing_date}</td><td>${x.days_listed}</td><td>${fmt.eok(x.mktcap)}</td><td>${fmt.eok(x.mcap15)}</td><td>${x.rank}</td><td>${x.threshold_rank}위 (${fmt.eok(x.threshold_mcap)})</td><td class="l">${x.eligible?'<span class="badge up">요건 충족</span>':'<span class="muted small">'+esc(x.note)+'</span>'}</td></tr>`).join('')||'<tr><td colspan="9" class="l muted">해당 없음</td></tr>'}</tbody></table></div></div>
+  <div class="card" style="margin-top:12px"><h3>MSCI Korea 11월 반기리뷰 (발표 11/11 · 효력 12/1) 후보</h3><div class="small muted">GIMI(May 2026) §2.3.2: EM Standard 최소규모 범위 USD ${m.em_min_full_usd_bn}bn~9.06bn(풀시총), 유동시총은 그 50% 이상 · 실제 컷오프는 리뷰 시점의 시장별 사이즈 세그먼트 컷오프로 결정되며 아래는 풀시총 기준 참고 리스트입니다. 프록시: TIGER MSCI Korea TR (${m.n_current}종목, ${m.proxy_date}).</div>
+    <div class="grid g2"><div><h4>비구성 대형주 (풀시총 ≥ EM 하한 0.8배)</h4><div class="tbl short"><table><thead><tr><th class="l">종목</th><th>시장</th><th>풀시총</th><th>USD bn</th><th>추정FIF</th><th>유동시총 USD bn</th><th>상장일</th></tr></thead><tbody>${m.candidates.map(x=>`<tr><td class="l">${esc(x.name)} <span class="muted small">${nv(x.code)}</span></td><td>${x.market}</td><td>${fmt.eok(x.mktcap)}</td><td>${x.mktcap_usd_bn.toFixed(2)}</td><td>${x.fif?x.fif.toFixed(2):'-'}</td><td>${x.float_usd_bn?x.float_usd_bn.toFixed(2):'-'}</td><td>${x.listing_date||'-'}</td></tr>`).join('')}</tbody></table></div></div>
+    <div><h4>현 구성 중 소형 (편출 후보 참고)</h4><div class="tbl short"><table><thead><tr><th class="l">종목</th><th>ETF 비중</th><th>풀시총</th></tr></thead><tbody>${m.smallest_current.map(x=>`<tr><td class="l">${esc(x.name)}</td><td>${x.weight!=null?x.weight+'%':'-'}</td><td>${fmt.eok(x.mktcap)}</td></tr>`).join('')}</tbody></table></div></div></div>
+    <div class="note">극단적 가격상승 종목(5D~60D 100~400%, 90D~250D 500~2500% 초과수익)은 Standard 편입 제외(GIMI 2.3.6.3). 외국인 보유한도(Foreign Room 15% 미만) 종목은 편입 제한.</div></div>
+  <div class="card" style="margin-top:12px"><h3>KRX 대표지수 수시변경 규칙 요약</h3><dl class="kb"><dt>부적합종목</dt><dd>상장폐지 결정·관리종목 지정(코스닥은 투자주의환기 포함) 후 2매매일 경과한 날의 다음 매매일 제외, 해당 산업군 예비종목 1순위 편입(정기변경 1개월 이내면 미편입 가능). 합병·주식교환 상장폐지는 매매거래정지 개시일 제외</dd><dt>합병</dt><dd>비구성종목에 피흡수: 매매거래정지 개시일 교체(합병법인 30매매일 이상 정지 후 재개 시 재개일 익일). 구성종목 간: 정지일 교체 + 합병신주 선반영</dd><dt>기업분할</dt><dd>존속법인 시총(분할비율 적용) < 구성종목 최소 시총이면 제외(재개일+2매매일 익일). 신설법인 시총 > 구성종목 시총 80%위 종목이면 편입(상장 익일). 시총 산정: 정지 개시일 7매매일 전부터 소급 30매매일</dd></dl></div>`;
+}
+
+/* ---------- ETF·BM 방법론 ---------- */
+function renderEtf(){
+  const wrap=$('#tab-etf');
+  wrap.innerHTML = `<div class="card"><div class="row"><b>순자산 상위 ETF (${D.etfs.length}) · BM · 방법론</b><input type="text" id="etf-q" placeholder="ETF/지수/산출기관 검색"><select id="etf-p"><option value="">전체 산출기관</option>${[...new Set(D.etfs.map(e=>e.provider))].map(p=>`<option>${esc(p)}</option>`).join('')}</select><label><input type="checkbox" id="etf-dom"> 국내지수만</label></div><div class="tbl" id="etf-tbl"></div></div><div id="etf-detail" style="margin-top:12px"></div>`;
+  const draw=()=>{
+    const q=($('#etf-q').value||'').toLowerCase(), p=$('#etf-p').value, dom=$('#etf-dom').checked;
+    const rows=D.etfs.filter(e=>(!q||(e.name+e.bm+e.provider).toLowerCase().includes(q))&&(!p||e.provider===p)&&(!dom||EIK[e.bm]!==undefined)).sort((a,b)=>(b.aum_eok||0)-(a.aum_eok||0));
+    $('#etf-tbl').innerHTML=`<table><thead><tr><th class="l">ETF</th><th>순자산</th><th class="l">기초지수(BM)</th><th class="l">산출기관</th><th class="l">정기변경</th><th class="l">캡</th><th class="l">수시/캡 점검</th><th>신뢰도</th></tr></thead><tbody>${rows.map(e=>`<tr data-c="${e.code}" style="cursor:pointer"><td class="l"><b>${esc(e.name)}</b> <span class="muted small">${e.code}</span></td><td>${fmt.eokv(e.aum_eok)}</td><td class="l" style="white-space:normal">${esc(e.bm)}${EIK[e.bm]?' <span class="badge acc">분석</span>':''}</td><td class="l">${esc(e.provider)}</td><td class="l" style="white-space:normal;max-width:260px">${esc(e.cycle)}<div class="muted small">${esc(e.apply_rule)}</div></td><td class="l" style="white-space:normal;max-width:180px">${esc(e.cap)}</td><td class="l muted small" style="white-space:normal;max-width:300px">${esc(e.cap_check)}</td><td>${esc(e.confidence)}</td></tr>`).join('')}</tbody></table>`;
+    document.querySelectorAll('#etf-tbl tr[data-c]').forEach(tr=>tr.onclick=()=>showEtf(tr.dataset.c));
+  };
+  $('#etf-q').oninput=draw; $('#etf-p').onchange=draw; $('#etf-dom').onchange=draw; draw();
+}
+function showEtf(code){
+  const e=D.etfs.find(x=>x.code===code); const key=EIK[e.bm]; const kb=key?KB[key]:null;
+  const members = key&&D.members[key]? D.members[key].length : null;
+  $('#etf-detail').innerHTML = `<div class="card"><h3>${esc(e.name)} <span class="muted small">${e.code} · 순자산 ${fmt.eokv(e.aum_eok)} · NAV ${fmt.n(e.nav)}</span></h3>
+    <dl class="kb"><dt>기초지수</dt><dd>${esc(e.bm)} (${esc(e.provider)})</dd><dt>정기변경 주기</dt><dd>${esc(e.cycle)} — ${esc(e.apply_rule)}</dd><dt>캡</dt><dd>${esc(e.cap)} / ${esc(e.cap_type)}</dd><dt>캡 점검·수시</dt><dd>${esc(e.cap_check)}</dd><dt>정보 신뢰도</dt><dd>${esc(e.confidence)}</dd></dl>
+    ${kb?`<h4>공식 방법론 요약 — ${esc(kb.name)} <span class="muted">(${esc(kb.doc)})</span></h4><dl class="kb"><dt>유니버스</dt><dd>${esc(kb.universe)}</dd>${kb.sector?`<dt>산업군</dt><dd>${esc(kb.sector)}</dd>`:''}${kb.criteria?`<dt>심사기준/선정일</dt><dd>${esc(kb.criteria)}</dd>`:''}<dt>선정</dt><dd><ul>${(kb.selection||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></dd><dt>정기변경</dt><dd>${esc(kb.regular)}</dd><dt>수시변경</dt><dd><ul>${(kb.adhoc||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></dd><dt>가중/캡</dt><dd>${esc(kb.cap)}</dd>${kb.notes?`<dt>비고</dt><dd>${esc(kb.notes)}</dd>`:''}</dl>${kb.doc_url?`<a href="${kb.doc_url}" target="_blank" rel="noopener">원문 →</a>`:''}${members?`<div class="muted small" style="margin-top:6px">프록시 ETF 구성종목 ${members}개 (${D.proxy[key]?.date})</div>`:''}`:'<div class="note">이 지수는 아직 정량 분석 대상이 아닙니다(해외지수·소규모 산출기관). 위 마스터 정보(투자설명서·방법론 조사)를 참고하세요.</div>'}
+  </div>`;
+  $('#etf-detail').scrollIntoView({behavior:'smooth'});
+}
+
+/* ---------- 종목 검색 ---------- */
+const NAMES = {}; // code -> name (from analysis universes & tops)
+[...A.kospi200.all, ...A.kosdaq150.all].forEach(u=>NAMES[u.code]=u.name);
+[...A.fn_top10.top, ...A.fn_semitop10.top, ...A.msci.candidates].forEach(u=>NAMES[u.code]=u.name);
+const PROXY_LABEL = {kospi200:'KOSPI 200 (KODEX 200)',kosdaq150:'KOSDAQ 150',kospi100:'KOSPI 100',kospi:'코스피(전종목)',kospi200_it:'코스피200 정보기술',fn_top10:'FnGuide TOP10',msci_korea:'MSCI Korea',krx_semi:'KRX 반도체',fn_semitop10:'FnGuide 반도체TOP10',fn_aitop2:'FnGuide AI반도체TOP2+',fn_ksemi:'FnGuide K-반도체',fn_top5plus:'FnGuide TOP5 Plus',fn_battery:'FnGuide 2차전지산업',fn_defense:'FnGuide K-방위산업',fn_ship:'FnGuide 조선TOP3+',fn_aitop3:'FnGuide AI반도체TOP3+',mkf_samsung:'MKF 삼성그룹',mkf_hyundai:'MKF 현대차그룹+',valueup:'코리아 밸류업',fn_sobujang:'FnGuide AI반도체 소부장',fn_dividend:'FnGuide 배당주',k200s_fin:'코스피200 금융',k200s_enerchem:'코스피200 에너지화학',k200s_ind:'코스피200 산업재',k200s_const:'코스피200 건설',k200s_heavy:'코스피200 중공업',k200s_steel:'코스피200 철강소재',k200s_staples:'코스피200 생활소비재',k200s_discr:'코스피200 경기소비재',k200s_comm:'코스피200 커뮤니케이션서비스',k200s_health:'코스피200 헬스케어'};
+function renderSearch(){
+  $('#tab-search').innerHTML=`<div class="card"><div class="row"><b>종목 검색</b><input type="text" id="s-q" placeholder="종목명 또는 코드 (예: 대덕전자, 005930)" style="width:280px"></div><div id="s-res"></div></div>`;
+  const draw=()=>{
+    const q=($('#s-q').value||'').trim().toLowerCase(); const box=$('#s-res'); if(q.length<1){box.innerHTML='';return;}
+    const hits=Object.entries(NAMES).filter(([c,n])=>c.includes(q)||n.toLowerCase().includes(q)).slice(0,8);
+    box.innerHTML = hits.map(([c,n])=>{
+      const mem=Object.entries(D.members).filter(([k,arr])=>arr.includes(c)).map(([k])=>PROXY_LABEL[k]||k);
+      const k=A.kospi200.all.find(u=>u.code===c), kq=A.kosdaq150.all.find(u=>u.code===c);
+      const t=A.fn_top10.top.find(u=>u.code===c), s=A.fn_semitop10.top.find(u=>u.code===c);
+      const ipo=A.ipo_monitor.find(u=>u.code===c), ms=A.msci.candidates.find(u=>u.code===c);
+      const line=(lab,u)=>u?`<div><b>${lab}</b>: ${statusBadge(u.status)} 산업군 ${esc(u.sector)} · 시총순위 ${u.mcap_rank}/${u.n_exist} (${fmt.pct(u.rank_ratio,0)}) · 누적 ${fmt.pct(u.cum_share)} · 유동성 ${u.liq_ok?'충족':'미달'} · 일평균시총 ${fmt.eok(u.avg_mcap)} · 거래대금 ${fmt.eok(u.avg_trdval)}${u.cur_weight!=null?' · 현비중 '+u.cur_weight+'%':''}</div>`:'';
+      return `<div class="card" style="margin-top:8px"><h3>${esc(n)} <span class="muted small">${nv(c)}</span></h3><div class="small">현재 편입(프록시 ETF 기준): ${mem.length?mem.map(m=>`<span class="badge">${esc(m)}</span>`).join(' '):'<span class="muted">없음</span>'}</div>
+        ${line('코스피200 12월 시뮬레이션',k)}${line('코스닥150 12월 시뮬레이션',kq)}
+        ${t?`<div><b>FnGuide TOP10</b>: 유동시총 순위 ${t.rank}위 ${t.rank<=10?(t.is_cur?'<span class="badge ok">유지</span>':'<span class="badge up">신규편입</span>'):(t.is_cur?'<span class="badge dn">편출</span>':'')}${t.excluded?` <span class="badge warn">${esc(t.excluded)}</span>`:''}</div>`:''}
+        ${s?`<div><b>FnGuide 반도체TOP10</b>: 순위 ${s.rank}위 ${s.rank<=10?(s.is_cur?'<span class="badge ok">유지</span>':'<span class="badge up">신규편입</span>'):(s.is_cur?'<span class="badge dn">편출</span>':'')}</div>`:''}
+        ${ipo?`<div><b>신규상장 특례</b>: 시총 ${ipo.rank}위 (기준 ${ipo.threshold_rank}위) ${ipo.eligible?'<span class="badge up">요건 충족</span>':''}</div>`:''}
+        ${ms?`<div><b>MSCI 후보</b>: 풀시총 USD ${ms.mktcap_usd_bn.toFixed(2)}bn</div>`:''}</div>`;
+    }).join('')||'<div class="muted">검색 결과 없음 (심사대상 유니버스 내 종목만 검색됩니다)</div>';
+  };
+  $('#s-q').oninput=draw;
+}
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('section.tab').forEach(s=>s.classList.toggle('on',s.id==='tab-'+b.dataset.t));location.hash=b.dataset.t;});
+renderDash(); renderCal(); renderKrx('kospi200',$('#tab-k200')); renderKrx('kosdaq150',$('#tab-kq150')); renderTop(); renderAdhoc(); renderEtf(); renderSearch();
+if(location.hash){const b=document.querySelector(`#nav button[data-t="${location.hash.slice(1)}"]`); if(b) b.click();}
+</script>
+</body>
+</html>
