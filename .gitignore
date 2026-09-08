@@ -4,3 +4,4 @@ dist/.git/
 __pycache__/
 *.pyc
 update.log
+.omc/
