@@ -10,6 +10,10 @@ Write-Host "[1/5] market data (naver/daum/wise)..."
 python fetch_market.py
 if ($LASTEXITCODE -ne 0) { Write-Host "fetch_market failed"; exit 1 }
 
+Write-Host "[1b] KRX official GICS classification..."
+python fetch_gics.py
+if ($LASTEXITCODE -ne 0) { Write-Host "fetch_gics failed (using previous classification)" }
+
 Write-Host "[2/5] ETF holdings (wisereport CU)..."
 python fetch_holdings.py
 if ($LASTEXITCODE -ne 0) { Write-Host "fetch_holdings failed"; exit 1 }
@@ -22,6 +26,7 @@ python rebal_flow.py
 if ($LASTEXITCODE -ne 0) { Write-Host "rebal_flow failed"; exit 1 }
 python flow_engine.py
 if ($LASTEXITCODE -ne 0) { Write-Host "flow_engine failed"; exit 1 }
+python backtest_june.py
 
 Write-Host "[4/5] build site..."
 python methodology_kb.py

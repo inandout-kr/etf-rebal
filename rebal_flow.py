@@ -37,8 +37,7 @@ CUM_SEC, LIQ_SEC, MIN_N = 0.95, 0.90, 20
 MIDLARGE_CUM = 0.94
 SEMI_WICS = "반도체와반도체장비"
 # WICS는 반도체로 분류하나 GICS(KRX 적용)상 반도체가 아닌 것으로 추정되는 종목 (현행 지수 미편입 근거)
-GICS_NOT_SEMI = {"402340": "SK스퀘어: 지주회사(GICS 비반도체 추정, 현행 KRX 반도체 미편입)",
-                 "007660": "이수페타시스: PCB(GICS 전자부품, 현행 미편입)"}
+GICS_NOT_SEMI = {}   # KRX 공식 GICS(index.krx.co.kr 산업별 종목현황) 사용: SK스퀘어=자본재(2010), 이수페타시스=하드웨어(4520), 솔브레인·동진쎄미켐=소재(1510)
 ETFS = [
     {"key": "krx_semi", "code": "091160", "name": "KODEX 반도체", "mult": 1.0},
     {"key": "krx_semi_tiger", "code": "091230", "name": "TIGER 반도체", "mult": 1.0},
@@ -110,7 +109,8 @@ def main():
     midlarge = {c for c, _ in ml_sel}
 
     cur_rows = {r["code"]: r for r in holdings["krx_semi"]["rows"] if r.get("code")}
-    semis = {c for c, s in stocks.items() if s.get("wics_mid") == SEMI_WICS and s["is_common"]} | set(cur_rows)
+    # 섹터 유니버스: KRX 공식 GICS 산업그룹 4530(반도체및반도체장비) ∪ 현행 구성종목
+    semis = {c for c, s in stocks.items() if s.get("gics_ig") == "4530" and s["is_common"]} | set(cur_rows)
     # GICS 분류 추론: 2025년 9월 정기변경 심사기간(2025.5~7월) 기준으로 이미 규모요건을 충족했는데도 현행 지수에 없는 종목은
     # KRX(GICS)상 반도체가 아닌 것으로 추정 → 심사대상에서 제외 (현행 구성종목 중 최소 규모 종목의 2025.5~7월 일평균시총을 기준선으로 사용)
     stats25 = period_stats(con, "20250501", "20250731")
@@ -121,8 +121,8 @@ def main():
             continue
         ld = (stocks[c].get("listing_date") or "").replace("-", "")
         m25 = stats25.get(c, {}).get("avg_mcap")
-        if cur_min25 and m25 and (not ld or ld <= "20250430") and m25 >= cur_min25:
-            gics_inferred[c] = f"2025 심사기간 일평균시총 {m25/1e8:,.0f}억 ≥ 현행 최소 구성종목 {cur_min25/1e8:,.0f}억인데 미편입 → GICS 비반도체 추정"
+        if False:   # KRX 공식 GICS 사용 → 규모 기반 추론 불필요
+            gics_inferred[c] = ""
     pdf_date = holdings["krx_semi"]["date"].replace("-", "")
     px_pdf = {r[0]: r[1] for r in con.execute("SELECT code, close FROM daily WHERE date=?", (pdf_date,))}
 
@@ -247,7 +247,7 @@ def main():
     out = {
         "index": "KRX 반도체", "ref_date": REF_DATE, "period": PERIOD, "expiry": EXPIRY, "apply": APPLY, "data_through": last_date,
         "pdf_date": holdings["krx_semi"]["date"], "n_current": len(cur_rows), "n_midlarge": len(midlarge), "midlarge_cutoff_mcap": ml_cut,
-        "rules": "심사대상 = KRX 중대형 TMI(5~7월 일평균시총, 누적 94%·커버리지 CAP 10%) ∩ GICS 반도체및반도체장비 → 일평균시총 누적 95% & 거래대금 상위 90%(최소 20종목) → 유동시총 가중·20% CAP",
+        "rules": "심사대상 = KRX 중대형 TMI(5~7월 일평균시총, 누적 94%·커버리지 CAP 10%) ∩ KRX 공식 GICS 반도체및반도체장비(4530) → 일평균시총 누적 95% & 거래대금 상위 90%(최소 20종목) → 유동시총 가중·20% CAP",
         "krx_notices": ["2026-09-04 '26년 9월 KRX 100 지수 및 KRX 섹터지수 구성종목 정기변경 (반영일 9/11, 상세는 지수정보상품)",
                         "2026-09-04 '26년 9월 CAP Factor 정기변경 (KRX 100·섹터지수 17종, 9/11)",
                         "2026-09-04 '26.9월 KRX TMI 지수 정기변경 (커버리지 계산 시 개별종목 CAP 10% 적용)"],

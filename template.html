@@ -190,7 +190,7 @@ function renderDash(){
   <div class="grid g2" style="margin-top:14px">
     <div class="card"><div class="eyebrow">일정</div><h2>다가오는 이벤트</h2><p class="sub">공식 방법론의 날짜 규칙으로 계산 · 전체는 일정 탭</p>
       <ul class="tl">${ev.map(e=>`<li class="${e.dday<=7?'soon':''}"><div><div class="d">${fmt.md(e.date)}</div><div class="dd">D-${e.dday}</div></div><div><div class="i">${esc(e.index)}</div><div class="e">${esc(e.event)}</div><div class="s">${esc(e.etfs)}</div></div></li>`).join('')}</ul></div>
-    <div class="card"><div class="eyebrow">예측</div><h2>예상 편출입 한눈에</h2><p class="sub">괄호 안은 산업군 내 시총순위 ÷ 기존 구성종목수</p>
+    <div class="card"><div class="eyebrow">예측</div><h2>예상 편출입 한눈에</h2><p class="sub">괄호 안은 산업군 내 시총순위 ÷ 기존 구성종목수 · 같은 로직의 6월 정기변경 재현: 코스피200 8/8, 코스닥150 편입 13/16·편출 16/16 (각 탭 '검증' 참조)</p>
       <div class="tbl" style="max-height:none;border:0"><table><thead><tr><th class="l">지수</th><th>적용</th><th class="l wrap">편입</th><th class="l wrap">편출</th></tr></thead><tbody>
         <tr><td class="l"><b>코스피 200</b></td><td>${fmt.md(k.window.apply)}</td><td class="l wrap">${k.adds.map(u=>`${esc(u.name)} <span class="muted xs">(${fmt.pct(u.rank_ratio,0)})</span>`).join(', ')||'-'}</td><td class="l wrap">${k.dels.map(u=>`${esc(u.name)} <span class="muted xs">(${u.rank_ratio?fmt.pct(u.rank_ratio,0):esc(u.status)})</span>`).join(', ')||'-'}</td></tr>
         <tr><td class="l"><b>코스닥 150</b></td><td>${fmt.md(q.window.apply)}</td><td class="l wrap">${chg(q.adds)}</td><td class="l wrap">${chg(q.dels)}</td></tr>
@@ -298,8 +298,9 @@ function renderKrx(key, mount){
       <p class="sub">심사기준일 <b>${fmt.date(idx.window.ref_date)}</b> · 심사기간 ${fmt.date(idx.window.period_start)}~${fmt.date(idx.window.period_end)} 중 <b>${fmt.date(idx.data_through)}까지 집계</b> · 적용 <b>${idx.window.apply}</b> (선물만기 ${idx.window.expiry} 익영업일) · 결과 공표 ${idx.window.announce.slice(0,7)} · 현 구성 ${idx.n_current} · 심사대상 ${idx.n_universe}</p></div>
       <div class="r"><label class="small muted">추종자금(조원)</label><input type="number" id="${key}-aum" value="${aumDef}" step="0.5" style="width:90px"></div></div>
     <div id="${key}-tables"></div>
-    ${note('규칙·추종자금 가정', `${esc(idx.rules)}.<br><b>추종자금</b>: 입력값 × 예상 비중 = 패시브 매수/매도 추정액. 기본값은 해당 지수 추종 국내 ETF 순자산 합계 ${fmt.eokv(A.tracking_aum[key]?.total_eok)} (${A.tracking_aum[key]?.etfs.length}개, 레버리지·커버드콜 포함)이며 연기금·인덱스펀드는 제외이므로 실제 총 추종자금은 이보다 큽니다. 유동비율은 추정 FIF(중앙값 대체) 적용.`)}
+    ${note('규칙·추종자금 가정', `${esc(idx.rules)}.<br><b>산업군</b>: KRX 인덱스 사이트의 공식 GICS 산업분류(산업별 종목현황) 사용, 미분류 종목만 섹터 ETF·WICS로 보완.<br><b>확신도</b>: 高 = 버퍼·누적시총 기준까지 3순위 이상 여유, 中 = 1.5~3순위, 低 = 경계(1.5순위 이내)·3차 충원·급등 종목. <b>급등</b> = 심사기간 수익률 +150% 이상(거래소가 정성 판단으로 탈락시킨 사례가 반복된 유형).<br><b>추종자금</b>: 입력값 × 예상 비중 = 패시브 매수/매도 추정액. 기본값은 해당 지수 추종 국내 ETF 순자산 합계 ${fmt.eokv(A.tracking_aum[key]?.total_eok)} (${A.tracking_aum[key]?.etfs.length}개, 레버리지·커버드콜 포함)이며 연기금·인덱스펀드는 제외이므로 실제 총 추종자금은 이보다 큽니다. 유동비율은 추정 FIF(중앙값 대체) 적용.`)}
   </div>
+  ${backtestCard(key)}
   <div class="grid g2" style="margin-top:14px">
     <div class="card"><div class="eyebrow">경계</div><h2>유지 경계 종목</h2><p class="sub">순위비율 ≥ 90% · 편출 위험 순</p><div class="tbl short">${krxTable(idx.watch_keep, null, false)}</div></div>
     <div class="card"><div class="eyebrow">경계</div><h2>편입 경계 종목</h2><p class="sub">미선정 중 기준 근접 순</p><div class="tbl short">${krxTable(idx.watch_new, null, false)}</div></div>
@@ -324,12 +325,25 @@ function renderKrx(key, mount){
   $(`#${key}-aum`).oninput=drawMain; drawMain();
   $(`#${key}-q`).oninput=drawAll; document.querySelectorAll(`#${key}-f button`).forEach(b=>b.onclick=()=>{document.querySelectorAll(`#${key}-f button`).forEach(x=>x.classList.toggle('on',x===b));f=b.dataset.v;drawAll();}); drawAll();
 }
+
+function backtestCard(key){
+  const b=D.backtest&&D.backtest[key]; if(!b) return '';
+  const ok = (h,n)=>`<b class="${h===n?'pos':''}">${h}/${n}</b>`;
+  return `<div class="card" style="margin-top:14px"><div class="eyebrow">검증</div><h2>같은 로직으로 ${esc(b.review.slice(0,7))} 정기변경 재현</h2><p class="sub">${esc(b.review)} · 당시 심사기간 데이터와 6월 이전 구성종목으로 시뮬레이션한 결과를 KRX 공표 결과와 비교</p>
+    <div class="grid g2"><div><h3>편입 적중 ${ok(b.adds_hit.length,b.n_official_adds)}</h3><div class="chips">${b.adds_hit.map(x=>`<span class="badge ok">${esc(x)}</span>`).join('')}${b.adds_miss.map(x=>`<span class="badge dn" title="정답이나 예측 못함">놓침 ${esc(x)}</span>`).join('')}${b.adds_fp.map(x=>`<span class="badge warn" title="예측했으나 실제 미편입">오탐 ${esc(x)}</span>`).join('')}</div></div>
+    <div><h3>편출 적중 ${ok(b.dels_hit.length,b.n_official_dels)}</h3><div class="chips">${b.dels_hit.map(x=>`<span class="badge ok">${esc(x)}</span>`).join('')}${b.dels_miss.map(x=>`<span class="badge dn" title="정답이나 예측 못함">놓침 ${esc(x)}</span>`).join('')}${b.dels_fp.map(x=>`<span class="badge warn" title="예측했으나 실제 미편출">오탐 ${esc(x)}</span>`).join('')}</div></div></div>
+    ${key==='kosdaq150'?'<p class="small muted" style="margin:10px 0 0">코스닥150 오탐 4건(파두·대한광통신·메지온·하이젠알앤엠)은 규모·유동성 요건은 충족했으나 거래소 지수운영위원회의 정성 판단(부적합·급등·투자경고)으로 제외된 종목이고, 놓친 3건(기가비스·로보스타·비츠로셀)은 그 자리를 채운 차순위 종목입니다. 편출 오탐 2건은 6월 이후 관리종목 지정(CMG제약)·재구성 시 초과분 조정입니다.</p>':'<p class="small muted" style="margin:10px 0 0">코스피200은 편입·편출 8종목 전부 일치합니다. 산업군을 WICS로 근사했을 때는 6/8이었고, KRX 공식 GICS 분류를 적용한 뒤 완전 일치했습니다.</p>'}
+  </div>`;
+}
+
 function krxTable(rows, fm, isAdd){
   const flowCol = fm? `<th>예상비중</th><th>패시브 ${isAdd?'매수':'매도'}</th><th>ADV</th>`:'';
-  return `<table><thead><tr><th class="l">종목</th><th class="l">산업군</th><th>일평균시총</th><th>거래대금</th><th>순위/기존</th><th>순위비율</th><th>누적</th><th>유동성</th><th class="l">상태</th>${flowCol}<th>현비중</th></tr></thead><tbody>${rows.map(u=>{
+  const confCol = fm? `<th class="l">확신도</th>`:'';
+  const confBadge = u => u.confidence? `<span class="badge ${u.confidence==='高'?'ok':u.confidence==='中'?'acc':'warn'}" title="${esc(u.conf_note||'')}">${u.confidence}</span>${u.risk?` <span class="badge warn" title="심사기간 수익률 ${fmt.pct(u.ret_period,0)}">급등</span>`:''}<div class="muted xs">${esc(u.conf_note||'')}</div>` : '';
+  return `<table><thead><tr><th class="l">종목</th><th class="l">산업군</th><th>일평균시총</th><th>거래대금</th><th>순위/기존</th><th>순위비율</th><th>누적</th><th>유동성</th><th class="l">상태</th>${confCol}${flowCol}<th>현비중</th></tr></thead><tbody>${rows.map(u=>{
     let fc='';
-    if(fm){ const flow = isAdd? fm.flowAdd(u) : fm.flowDel(u); const w = isAdd? fm.weight(u) : fm.weightDel(u); const adv = fm.advDays(flow,u); fc=`<td>${fmt.pct(w,2)}</td><td class="${isAdd?'pos':'neg'}"><b>${fmt.eokv(flow)}</b></td><td>${adv==null?'-':adv.toFixed(1)+'일'}</td>`; }
-    return `<tr><td class="l">${nm(u.name,u.code)}</td><td class="l">${esc(u.sector||'')}${u.sector_src==='WICS'?'<span class="code">WICS</span>':u.sector_src==='수동보정'?'<span class="code">보정</span>':''}</td><td>${fmt.eok(u.avg_mcap)}</td><td>${fmt.eok(u.avg_trdval)}</td><td>${u.mcap_rank??'-'}/${u.n_exist??'-'}</td><td class="${u.rank_ratio>1?'neg':''}">${fmt.pct(u.rank_ratio,0)}</td><td>${fmt.pct(u.cum_share,1)}</td><td>${u.liq_ok===false?'<span class="badge dn">미달</span>':u.liq_ok?'<span class="badge ok">충족</span>':'-'}</td><td class="l">${statusBadge(u.status)}${u.note?`<div class="muted xs">${esc(u.note)}</div>`:''}</td>${fc}<td>${u.cur_weight!=null?u.cur_weight+'%':'-'}</td></tr>`;}).join('')}</tbody></table>`;
+    if(fm){ const flow = isAdd? fm.flowAdd(u) : fm.flowDel(u); const w = isAdd? fm.weight(u) : fm.weightDel(u); const adv = fm.advDays(flow,u); fc=`<td class="l">${confBadge(u)}</td><td>${fmt.pct(w,2)}</td><td class="${isAdd?'pos':'neg'}"><b>${fmt.eokv(flow)}</b></td><td>${adv==null?'-':adv.toFixed(1)+'일'}</td>`; }
+    return `<tr><td class="l">${nm(u.name,u.code)}</td><td class="l">${esc(u.sector||'')}${u.sector_src==='KRX GICS'?'':u.sector_src==='WICS'?'<span class="code">WICS</span>':u.sector_src?'<span class="code">'+esc(u.sector_src)+'</span>':''}</td><td>${fmt.eok(u.avg_mcap)}</td><td>${fmt.eok(u.avg_trdval)}</td><td>${u.mcap_rank??'-'}/${u.n_exist??'-'}</td><td class="${u.rank_ratio>1?'neg':''}">${fmt.pct(u.rank_ratio,0)}</td><td>${fmt.pct(u.cum_share,1)}</td><td>${u.liq_ok===false?'<span class="badge dn">미달</span>':u.liq_ok?'<span class="badge ok">충족</span>':'-'}</td><td class="l">${statusBadge(u.status)}${u.risk&&!fm?` <span class="badge warn">급등</span>`:''}${u.note?`<div class="muted xs">${esc(u.note)}</div>`:''}</td>${fc}<td>${u.cur_weight!=null?u.cur_weight+'%':'-'}</td></tr>`;}).join('')}</tbody></table>`;
 }
 
 /* ---------- KOSPI100 / TOP / 테마 ---------- */

@@ -11,6 +11,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--since", default="20260201")
 ap.add_argument("--wics", default=None)
 ap.add_argument("--codes", default=None)
+ap.add_argument("--all-common", action="store_true")
 a = ap.parse_args()
 con = sqlite3.connect(DB)
 codes = set()
@@ -18,6 +19,8 @@ if a.wics:
     codes |= {r[0] for r in con.execute("SELECT code FROM stock WHERE is_common=1 AND wics_mid=?", (a.wics,))}
 if a.codes:
     codes |= set(a.codes.split(","))
+if a.all_common:
+    codes |= {r[0] for r in con.execute("SELECT code FROM stock WHERE is_common=1")}
 print(f"codes: {len(codes)} since {a.since}")
 def work(c):
     try:

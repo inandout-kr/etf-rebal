@@ -37,7 +37,7 @@ K200_SECTOR_ETF = {
 FIF = {}   # implied float ratio (main에서 채움)
 EXCLUDE_NAME_KW = ("스팩", "인프라", "선박투자", "맵스리얼티")   # SPAC·인프라·선박투자회사 (리츠는 접미사로 별도 판정)
 # WICS 분류가 GICS 상식과 다른 개별 종목 수동 보정 (코드: 산업군)
-SECTOR_OVERRIDE = {"140410": "헬스케어"}   # 메지온 (WICS 식품 → 제약)
+SECTOR_OVERRIDE = {}   # KRX 공식 GICS 사용 후 수동 보정 불필요 (WICS 폴백 전용)
 
 
 def is_excluded_name(nm):
@@ -57,10 +57,20 @@ def load():
 def period_stats(con, start, end):
     """심사대상기간 [start, end] 일평균 시가총액(종가×상장주식수)·일평균 거래대금"""
     rows = con.execute(
-        """SELECT code, COUNT(*) n, AVG(close*shares) avg_mcap, AVG(trdval) avg_trdval, MAX(date) last
+        """SELECT code, COUNT(*) n, AVG(close*shares) avg_mcap, AVG(trdval) avg_trdval, MAX(date) last, MIN(date) first
            FROM daily WHERE date BETWEEN ? AND ? AND close IS NOT NULL AND shares IS NOT NULL GROUP BY code""",
         (start, end)).fetchall()
-    return {r["code"]: {"n": r["n"], "avg_mcap": r["avg_mcap"], "avg_trdval": r["avg_trdval"], "last": r["last"]} for r in rows}
+    out = {r["code"]: {"n": r["n"], "avg_mcap": r["avg_mcap"], "avg_trdval": r["avg_trdval"], "last": r["last"], "first": r["first"]} for r in rows}
+    ends = con.execute(
+        """SELECT d.code, d.date, d.close FROM daily d JOIN (SELECT code, MIN(date) mn, MAX(date) mx FROM daily WHERE date BETWEEN ? AND ? GROUP BY code) g
+           ON g.code=d.code AND (d.date=g.mn OR d.date=g.mx)""", (start, end)).fetchall()
+    px = {}
+    for r in ends:
+        px.setdefault(r["code"], {})[r["date"]] = r["close"]
+    for c, st in out.items():
+        p0, p1 = px.get(c, {}).get(st["first"]), px.get(c, {}).get(st["last"])
+        st["ret_period"] = (p1 / p0 - 1) if (p0 and p1) else None
+    return out
 
 
 def implied_float(holdings, stocks, keys=("kospi200", "kosdaq150", "msci_korea")):
@@ -90,8 +100,18 @@ def recent_avg_mcap(con, code, ndays):
     return (sum(vals) / len(vals)) if vals else None
 
 
-def gics_sector(st, in_sector_etf):
-    """KRX 산업군 추정: 섹터 ETF 보유(구성종목) 우선, 아니면 WICS(+보정)"""
+GICS_SEC_NM = {"10": "에너지", "15": "소재", "20": "산업재", "25": "자유소비재", "30": "필수소비재", "35": "헬스케어",
+               "40": "금융및부동산", "45": "정보기술", "50": "커뮤니케이션서비스", "55": "유틸리티", "60": "금융및부동산"}
+
+
+def gics_sector(st, in_sector_etf, scheme="kospi200"):
+    """KRX 산업군: ① KRX 공식 GICS 분류(index.krx.co.kr 산업별 종목현황) ② 섹터 ETF 보유 ③ WICS(+보정) 순으로 결정.
+    scheme='kosdaq150' 이면 금융(40)과 부동산(60)을 분리(11개 산업군)."""
+    g = st.get("gics_sec")
+    if g:
+        if scheme == "kosdaq150" and g in ("40", "60"):
+            return ("금융" if g == "40" else "부동산"), "KRX GICS"
+        return GICS_SEC_NM.get(g, g), "KRX GICS"
     wics = st.get("wics_sec")
     mid = st.get("wics_mid") or ""
     base = WICS_TO_GICS.get(wics)
@@ -217,7 +237,7 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map):
             continue
         if not ps or not ps["avg_mcap"] or not ps["avg_trdval"]:
             continue
-        sec, src = gics_sector(st, sector_etf_map if key == "kospi200" else {})
+        sec, src = gics_sector(st, sector_etf_map if key == "kospi200" else {}, scheme=key)
         if not sec:
             if is_cur:
                 excluded.append({"code": code, "name": st["name"], "why": "산업군 미분류(WICS 없음)", "is_cur": True})
@@ -225,7 +245,8 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map):
         univ.append({"code": code, "name": st["name"], "sector": sec, "sector_src": src, "avg_mcap": ps["avg_mcap"],
                      "avg_trdval": ps["avg_trdval"], "n_days": ps["n"], "is_cur": is_cur, "cur_weight": curw.get(code),
                      "mktcap_now": st["mktcap"], "close": st["close"], "listing_date": st.get("listing_date"),
-                     "fif": FIF.get(code)})
+                     "fif": FIF.get(code), "ret_period": ps.get("ret_period"),
+                     "risk": ("급등(부적합 판정 위험)" if (ps.get("ret_period") or 0) >= 1.5 else None)})
     selected, dropped = simulate(univ, cur, cfg["N"], cfg["cum"], cfg["liq"], cfg["keep_buf"], cfg["new_buf"],
                                  sector_min_share=cfg.get("sector_min_share"), min_sector_exist=3)
     # 대형주 특례 후보 (최근 15매매일 평균시총 상위 50위)
@@ -236,6 +257,26 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map):
         u["mcap15"] = recent_avg_mcap(con, u["code"], 15)
     adds = sorted([u for u in univ if u["code"] in selected and not u["is_cur"]], key=lambda u: -u["avg_mcap"])
     dels = sorted([u for u in univ if u["code"] not in selected and u["is_cur"]], key=lambda u: u["avg_mcap"])
+    # 확신도: 임계값(버퍼·누적시총·유동성)까지의 여유. 경계(±1순위 이내)는 '低'
+    for u in adds:
+        rr = u.get("rank_ratio") or 0
+        margin = min(cfg["new_buf"] - rr, (cfg["cum"] - (u.get("cum_share") or 0)) if u.get("primary") else 0.05)
+        n_ex = u.get("n_exist") or 1
+        u["confidence"] = "高" if (cfg["new_buf"] - rr) * n_ex >= 3 and (u.get("cum_share") or 1) <= cfg["cum"] - 0.03 else ("中" if (cfg["new_buf"] - rr) * n_ex >= 1.5 else "低")
+        if "3차" in (u.get("status") or "") or u.get("risk"):
+            u["confidence"] = "低"
+        u["conf_note"] = f"순위 여유 {(cfg['new_buf'] - rr) * n_ex:.1f}위, 누적 {((u.get('cum_share') or 0)*100):.1f}%"
+    for u in dels:
+        rr = u.get("rank_ratio") or 0
+        n_ex = u.get("n_exist") or 1
+        over = (rr - cfg["keep_buf"]) * n_ex
+        if u.get("liq_ok") is False:
+            u["confidence"], u["conf_note"] = "中", "거래대금 순위 미달"
+        elif u.get("status") == "산업군제외":
+            u["confidence"], u["conf_note"] = "低", "산업군 시총 1% 미만 판정(분류 민감)"
+        else:
+            u["confidence"] = "高" if over >= 3 else ("中" if over >= 1.5 else "低")
+            u["conf_note"] = f"유지버퍼 초과 {over:.1f}위"
     # 경계 종목: 기존 - rank_ratio 0.95~1.3 / 신규 - primary & rank_ratio 0.7~1.0 or cum 0.8~0.9
     watch_keep = sorted([u for u in univ if u["is_cur"] and u["code"] in selected and u.get("rank_ratio") and u["rank_ratio"] >= 0.9],
                         key=lambda u: -u["rank_ratio"])
@@ -251,7 +292,7 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map):
         s["mcap"] += u["avg_mcap"]
     fields = ["code", "name", "sector", "sector_src", "avg_mcap", "avg_trdval", "n_days", "mcap_rank", "n_exist", "n_sector",
               "rank_ratio", "cum_share", "trd_rank", "liq_ok", "primary", "status", "mktcap_now", "close", "listing_date", "mcap15", "note",
-              "is_cur", "cur_weight", "fif"]
+              "is_cur", "cur_weight", "fif", "confidence", "conf_note", "ret_period", "risk"]
 
     def pick(u):
         return {k: u.get(k) for k in fields}
