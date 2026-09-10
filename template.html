@@ -110,7 +110,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:26px 16px}
   </div>
   <nav id="nav">
     <div class="grp"><span class="lbl">개요</span><button data-t="dash" class="on">대시보드</button><button data-t="cal">일정</button></div>
-    <div class="grp"><span class="lbl">플로우</span><button data-t="semi">KRX 반도체 9/11</button><button data-t="flows">전체 리밸 플로우</button></div>
+    <div class="grp"><span class="lbl">플로우</span><button data-t="semi" id="nav-semi">KRX 반도체</button><button data-t="flows">전체 리밸 플로우</button><button data-t="hist">히스토리</button></div>
     <div class="grp"><span class="lbl">예측</span><button data-t="k200">코스피 200</button><button data-t="kq150">코스닥 150</button><button data-t="top">KOSPI100·TOP·테마</button></div>
     <div class="grp"><span class="lbl">모니터</span><button data-t="adhoc">수시·특례·MSCI</button></div>
     <div class="grp"><span class="lbl">자료</span><button data-t="etf">ETF·방법론</button><button data-t="search">종목 검색</button></div>
@@ -120,6 +120,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:26px 16px}
   <section class="tab on" id="tab-dash"></section>
   <section class="tab" id="tab-cal"></section>
   <section class="tab" id="tab-semi"></section>
+  <section class="tab" id="tab-hist"></section>
   <section class="tab" id="tab-flows"></section>
   <section class="tab" id="tab-k200"></section>
   <section class="tab" id="tab-kq150"></section>
@@ -153,6 +154,7 @@ const NAMES = {};
 if(D.semi) Object.values(D.semi.scenarios).forEach(sc=>sc.rows.forEach(u=>NAMES[u.code]=u.name));
 if(D.flows) Object.entries(D.flows.by_stock).forEach(([c,v])=>NAMES[c]=v.name);
 
+if(D.semi) $('#nav-semi').textContent = `KRX 반도체 ${fmt.md(D.semi.apply)}`; else $('#nav-semi').hidden = true;
 $('#hdr-sub').textContent = `데이터 ${A.generated} 생성 · 시세 ${fmt.date(A.last_daily)} · ETF PDF ${D.proxy.kospi200.date} · USD/KRW ${fmt.n(A.usdkrw,0)}`;
 
 /* ---------- 패시브 플로우 모델 (KOSPI200/KOSDAQ150 탭) ---------- */
@@ -204,7 +206,7 @@ function renderDash(){
   </div>
   <div class="grid g2" style="margin-top:14px">
     <div class="card"><div class="eyebrow">플로우 하이라이트</div><h2>패시브 매수 상위</h2><p class="sub">남은 정기변경 전체 · 종목·이벤트 단위</p><ul class="list">${buys.map(hlRow).join('')}</ul></div>
-    <div class="card"><div class="eyebrow">플로우 하이라이트</div><h2>패시브 매도 상위</h2><p class="sub">KRX 반도체는 시나리오 A 기준</p><ul class="list">${sells.map(hlRow).join('')}</ul></div>
+    <div class="card"><div class="eyebrow">플로우 하이라이트</div><h2>패시브 매도 상위</h2><p class="sub">${D.semi?'KRX 반도체는 시나리오 A 기준':'남은 정기변경 전체 · 종목·이벤트 단위'}</p><ul class="list">${sells.map(hlRow).join('')}</ul></div>
   </div>`;
 }
 
@@ -256,18 +258,62 @@ function renderSemi(){
   $('#semi-all').onchange=draw; draw();
 }
 
+
+/* ---------- 히스토리 (매매 끝난 정기변경: 동결된 예측 vs 실제 PDF 변화) ---------- */
+function renderHist(){
+  const H=D.history||[]; const wrap=$('#tab-hist');
+  if(!H.length){wrap.innerHTML='<div class="card"><div class="eyebrow">히스토리</div><h2>지난 정기변경</h2><p class="sub">아직 매매가 끝난 이벤트가 없습니다. 매매일(적용일 전 영업일) 아침 계산 결과가 자동으로 동결되고, 매매 후 ETF PDF가 들어오면 실제 결과와 대조됩니다.</p></div>';return;}
+  const short={current:'A · 편출입 없음',cap10:'B · 커버리지 CAP 10%',literal:'C · 방법론 문언',base:'예측'};
+  const hitChips=(hit,fp,miss,lab)=>`${hit.map(x=>`<span class="badge ok">${esc(x)}</span>`).join('')}${miss.map(x=>`<span class="badge dn" title="실제 ${lab}됐으나 예측 못함">놓침 ${esc(x)}</span>`).join('')}${fp.map(x=>`<span class="badge warn" title="예측했으나 실제 ${lab} 안 됨">오탐 ${esc(x)}</span>`).join('')}${(hit.length+fp.length+miss.length)?'':'<span class="muted small">없음 (예측·실제 모두)</span>'}`;
+  wrap.innerHTML=`<div class="card"><div class="eyebrow">히스토리</div><h2>지난 정기변경 — 동결된 예측과 실제 결과</h2>
+    <p class="sub">매매일(적용일 전 영업일) 아침 계산 결과를 그대로 보관 · 실제 = 매매 후 프록시 ETF PDF 비중변화 × 총 추종명목 (직전 PDF는 새 PDF 기준일 종가로 드리프트 보정)</p>
+    <div class="tbl short"><table><thead><tr><th class="l">적용일</th><th class="l">지수</th><th>매매일</th><th>스냅샷 PDF</th><th>예측 매수/매도</th><th>실제 매수/매도</th><th class="l">편입 적중</th><th class="l">편출 적중</th><th>방향 일치</th></tr></thead><tbody>${H.map(h=>{const sc=h.scenarios[h.default_scenario]; const a=h.actual; const bs=a&&a.by_scenario[h.default_scenario];
+      return `<tr class="click" data-k="${h.key}_${h.apply_start}"><td><b>${esc(h.apply.slice(0,10))}</b></td><td class="l"><b>${esc(h.name)}</b></td><td>${esc(h.trade_date)}</td><td>${esc(h.snapshot.pdf_date)} ${h.snapshot.pre_trade?'<span class="badge ok">매매 전</span>':'<span class="badge warn" title="매매일 아침 갱신이 누락되어 매매 후 PDF로 저장된 스냅샷">사후</span>'}</td><td><span class="pos">+${fmt.eokv(sc.total_buy)}</span> / <span class="neg">${fmt.eokv(sc.total_sell)}</span></td><td>${a?`<span class="pos">+${fmt.eokv(a.total_buy)}</span> / <span class="neg">${fmt.eokv(a.total_sell)}</span>`:'<span class="muted">PDF 대기</span>'}</td><td class="l">${a?`<b>${bs.adds_hit.length}/${a.adds.length}</b>`:'-'}</td><td class="l">${a?`<b>${bs.dels_hit.length}/${a.dels.length}</b>`:'-'}</td><td>${a&&bs.dir_hit!=null?fmt.pct(bs.dir_hit,0):'-'}</td></tr>`;}).join('')}</tbody></table></div></div>
+  <div id="hist-detail" style="margin-top:14px"></div>`;
+  const show=(id, scroll)=>{
+    const h=H.find(x=>`${x.key}_${x.apply_start}`===id); if(!h) return;
+    document.querySelectorAll('#tab-hist tr[data-k]').forEach(tr=>tr.style.outline = tr.dataset.k===id? '2px solid var(--accent)':'' );
+    const keys=Object.keys(h.scenarios); let cur=h.default_scenario; const a=h.actual;
+    $('#hist-detail').innerHTML=`<div class="card"><div class="hd"><div><div class="eyebrow">상세 · ${a?'실제 결과 대조':'실제 결과 대기'}</div><h2>${esc(h.name)} <span class="muted" style="font-weight:500;font-size:13px">적용 ${esc(h.apply)} · 매매 ${esc(h.trade_date)} 종가 · 비중 확정 ${esc(h.fix||'-')}</span></h2>
+        <p class="sub">스냅샷: ${esc(h.snapshot.generated)} 계산 (PDF ${esc(h.snapshot.pdf_date)}${h.snapshot.data_through?', 시세 '+fmt.date(h.snapshot.data_through):''}) · 총 추종명목 ${fmt.eokv(h.notional_total)} (${h.etfs.map(e=>esc(e.name)).join(' · ')})${a?` · 실제: PDF ${esc(a.pdf_date)} 기준, ${esc(a.computed)} 대조`:' · 매매 후 PDF가 들어오면 자동 대조'}</p></div>
+        ${keys.length>1?`<div class="r"><div class="seg" id="hist-sc">${keys.map(k=>`<button data-v="${k}" class="${k===cur?'on':''}">${esc(short[k]||k)}</button>`).join('')}</div></div>`:''}</div>
+      <div class="callout" id="hist-desc"></div>
+      <div id="hist-sum" style="margin-top:12px"></div>
+      ${note('보관·대조 방법', `<b>보관</b>: 매매일 아침 갱신 결과(직전 영업일 PDF = 매매 전 포트폴리오)를 파일로 동결하고 이후 갱신에서 덮어쓰지 않습니다. <b>실제</b>: 매매 후 프록시 ETF PDF와 스냅샷 PDF의 비중 차이(직전 PDF는 새 PDF 기준일 종가로 드리프트 보정) × 총 추종명목. 지수 실제 비중이 아니라 ETF 실물 PDF 기준이므로 현금·선물·추적오차만큼 차이가 납니다. <b>방향 일치</b>: 예측 또는 실제 Δ가 0.05%p 이상인 종목 중 부호가 같은 비율. <b>규칙</b>: ${esc(h.rules||'')}`)}
+      <div class="tbl" id="hist-tbl" style="margin-top:12px"></div></div>`;
+    const draw=()=>{
+      const sc=h.scenarios[cur]; const bs=a&&a.by_scenario[cur];
+      $('#hist-desc').innerHTML=esc(sc.desc||'');
+      $('#hist-sum').innerHTML=`<div class="grid g4">
+        <div class="card tight kpi"><div class="l">예측 매수 / 매도</div><div class="v"><span class="pos">+${fmt.eokv(sc.total_buy)}</span> <span class="muted" style="font-size:14px">/</span> <span class="neg">${fmt.eokv(sc.total_sell)}</span></div></div>
+        <div class="card tight kpi"><div class="l">실제 매수 / 매도 (PDF)</div><div class="v">${a?`<span class="pos">+${fmt.eokv(a.total_buy)}</span> <span class="muted" style="font-size:14px">/</span> <span class="neg">${fmt.eokv(a.total_sell)}</span>`:'<span class="muted">대기</span>'}</div></div>
+        <div class="card tight kpi"><div class="l">편입 예측 → 실제</div><div class="v">${sc.adds.length} <span class="muted" style="font-size:14px">→</span> ${a?a.adds.length:'?'}</div><div class="s">${a?hitChips(bs.adds_hit,bs.adds_fp,bs.adds_miss,'편입'):sc.adds.map(x=>esc(x)).join(', ')||'-'}</div></div>
+        <div class="card tight kpi"><div class="l">편출 예측 → 실제</div><div class="v">${sc.dels.length} <span class="muted" style="font-size:14px">→</span> ${a?a.dels.length:'?'}</div><div class="s">${a?hitChips(bs.dels_hit,bs.dels_fp,bs.dels_miss,'편출'):sc.dels.map(x=>esc(x)).join(', ')||'-'}</div></div></div>
+        ${a?`<div class="row"><span class="badge ${bs.dir_hit>=0.8?'ok':bs.dir_hit>=0.6?'acc':'warn'}">방향 일치 ${fmt.pct(bs.dir_hit,0)} (${bs.n_pairs}종목)</span><span class="badge ghost">Δ 상관 ${bs.corr!=null?bs.corr.toFixed(2):'-'}</span></div>`:''}`;
+      const codes=new Set(sc.rows.map(r=>r.code)); const extra=a?Object.entries(a.rows).filter(([c])=>!codes.has(c)).map(([c,v])=>({code:c,name:v.name,status:'예측 밖',w_cur:v.w_old,w_target:null,delta:null,flow_total:null,adv_mult:null})):[];
+      const rows=[...sc.rows,...extra].sort((x,y)=>Math.abs((a?(a.rows[y.code]||{}).flow:y.flow_total)||0)-Math.abs((a?(a.rows[x.code]||{}).flow:x.flow_total)||0));
+      $('#hist-tbl').innerHTML=`<table><thead><tr><th class="l">종목</th><th class="l">예측</th><th>현재→목표</th><th>Δ 예측</th><th>순매매 예측</th><th>ADV</th>${a?'<th class="l">실제</th><th>PDF 전→후</th><th>Δ 실제</th><th>실제 매매</th><th>오차</th>':''}</tr></thead><tbody>${rows.map(r=>{const ar=a&&a.rows[r.code]; const act=ar?(ar.w_old===0?'신규편입':ar.w_new===0?'편출':'유지'):null; const err=(ar&&r.flow_total!=null)?ar.flow-r.flow_total:null;
+        return `<tr><td class="l">${nm(r.name,r.code)}</td><td class="l">${r.status==='예측 밖'?'<span class="badge ghost">예측 밖</span>':statusBadge(r.status)}${r.capped?' <span class="badge warn">CAP</span>':''}</td><td>${r.w_target!=null?`${(r.w_cur||0).toFixed(2)}→${r.w_target.toFixed(2)}%`:'-'}</td><td class="${cls(r.delta)}">${r.delta!=null?(r.delta>0?'+':'')+r.delta.toFixed(2)+'%p':'-'}</td><td class="${cls(r.flow_total)}"><b>${r.flow_total?fmt.signed(r.flow_total):'-'}</b></td><td>${r.adv_mult!=null?r.adv_mult.toFixed(1)+'일':'-'}</td>${a?`<td class="l">${ar?statusBadge(act):'<span class="muted">-</span>'}</td><td>${ar?`${ar.w_old.toFixed(2)}→${ar.w_new.toFixed(2)}%`:'-'}</td><td class="${cls(ar&&ar.delta)}">${ar?(ar.delta>0?'+':'')+ar.delta.toFixed(2)+'%p':'-'}</td><td class="${cls(ar&&ar.flow)}"><b>${ar&&ar.flow?fmt.signed(ar.flow):'-'}</b></td><td class="muted">${err!=null?fmt.signed(err):'-'}</td>`:''}</tr>`;}).join('')}</tbody></table>`;
+    };
+    document.querySelectorAll('#hist-sc button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#hist-sc button').forEach(x=>x.classList.toggle('on',x===b));cur=b.dataset.v;draw();});
+    draw(); if(scroll) $('#hist-detail').scrollIntoView({behavior:'smooth',block:'start'});
+  };
+  document.querySelectorAll('#tab-hist tr[data-k]').forEach(tr=>tr.onclick=()=>show(tr.dataset.k,true));
+  show(`${H[0].key}_${H[0].apply_start}`,false);
+}
+
 /* ---------- 전체 정기변경 플로우 ---------- */
 function wdesc(w){ if(!w) return '-'; if(w.type==='float') return `유동시총 가중${w.cap?` · ${Math.round(w.cap*100)}% 실링`:''}`; if(w.type==='topn_fixed') return `상위 ${w.n}종목 각 ${Math.round(w.w*100)}% 고정 + 나머지 ${{float:'유동시총 가중',equal:'균등',current:'현재비중 비례'}[w.rest]||w.rest}${w.cap?` (${Math.round(w.cap*100)}% 실링)`:''}`; if(w.type==='score_tiered') return `스코어 가중 · 1위 ${Math.round(w.first*100)}% / 그외 ${Math.round(w.others*100)}% 실링`; return JSON.stringify(w); }
 function renderFlows(){
   const F=D.flows; const wrap=$('#tab-flows'); if(!F){wrap.innerHTML='<div class="card">데이터 없음</div>';return;}
   const evs=[...F.events].sort((a,b)=>a.apply.localeCompare(b.apply));
   const byStock=Object.entries(F.by_stock).map(([c,v])=>({code:c,...v})).sort((a,b)=>Math.abs(b.total)-Math.abs(a.total));
-  wrap.innerHTML=`<div class="card"><div class="eyebrow">플로우</div><h2>남은 정기변경 — 지수별 패시브 매수/매도 추정</h2><p class="sub">적용일 순 · 행을 클릭하면 종목별 상세 · KRX 반도체(9/11)는 별도 탭</p>
+  wrap.innerHTML=`<div class="card"><div class="eyebrow">플로우</div><h2>남은 정기변경 — 지수별 패시브 매수/매도 추정</h2><p class="sub">적용일 순 · 행을 클릭하면 종목별 상세${D.semi?` · KRX 반도체(${fmt.md(D.semi.apply)})는 별도 탭`:''} · 매매가 끝난 이벤트는 히스토리 탭</p>
     <div class="tbl short"><table><thead><tr><th class="l">적용일</th><th class="l">지수</th><th>추종 명목</th><th>편입</th><th>편출</th><th>총매수</th><th>총매도</th><th class="l">최대 매수</th><th class="l">최대 매도</th></tr></thead><tbody>${evs.map(e=>{const b=e.rows.filter(r=>r.flow_total>0).slice(0,3), s_=e.rows.filter(r=>r.flow_total<0).slice(0,3);return `<tr class="click" data-k="${e.key}"><td><b>${esc(e.apply.slice(0,10))}</b>${e.apply.length>10?`<div class="muted xs">${esc(e.apply.slice(10).trim())}</div>`:''}</td><td class="l"><b>${esc(e.name)}</b></td><td>${fmt.eokv(e.notional_total)}</td><td>${e.adds.length||'<span class="muted">-</span>'}</td><td>${e.dels.length||'<span class="muted">-</span>'}</td><td class="pos">+${fmt.eokv(e.total_buy)}</td><td class="neg">${fmt.eokv(e.total_sell)}</td><td class="l xs wrap">${b.map(r=>`${esc(r.name)} <span class="pos">+${fmt.eokv(r.flow_total)}</span>`).join(' · ')}</td><td class="l xs wrap">${s_.map(r=>`${esc(r.name)} <span class="neg">${fmt.eokv(r.flow_total)}</span>`).join(' · ')}</td></tr>`;}).join('')}</tbody></table></div>
     ${note('계산 방법·가정', `각 지수의 <b>공식 가중·캡 규칙</b>으로 목표비중을 만들고, 프록시 ETF PDF 비중(최근 종가로 드리프트 보정)과의 차이에 추종 ETF 명목(레버리지는 2배에서 기초ETF 실물 보유분 중복 차감)을 곱했습니다. 종목 선정 로직을 재현할 수 있는 지수(KOSPI200·KOSDAQ150·KOSPI100·코스피200 IT·FnGuide TOP10·반도체TOP10)는 편출입 예측을 반영했고, 키워드/스코어 선정 지수는 <b>구성종목 불변 가정</b>으로 비중·캡 재설정 효과만 계산했습니다. 유지 종목의 소액 Δ는 유동비율 추정 오차가 섞여 있으니 편입·편출과 캡 재설정에 의한 큰 금액 위주로 보세요.`)}
   </div>
   <div id="flow-detail" style="margin-top:14px"></div>
-  <div class="card" style="margin-top:14px"><div class="hd"><div><div class="eyebrow">종목별 합산</div><h2>남은 이벤트 전체 수급 합계</h2><p class="sub">KRX 반도체 시나리오 A 포함 · 같은 종목의 반대 방향 플로우는 상쇄되어 표시</p></div><div class="r"><input type="text" id="flow-q" placeholder="종목명·코드"><label class="toggle"><input type="checkbox" id="flow-abs" checked> |합계| 순</label></div></div><div class="tbl" id="flow-stock"></div></div>`;
+  <div class="card" style="margin-top:14px"><div class="hd"><div><div class="eyebrow">종목별 합산</div><h2>남은 이벤트 전체 수급 합계</h2><p class="sub">${D.semi?'KRX 반도체 시나리오 A 포함 · ':''}같은 종목의 반대 방향 플로우는 상쇄되어 표시</p></div><div class="r"><input type="text" id="flow-q" placeholder="종목명·코드"><label class="toggle"><input type="checkbox" id="flow-abs" checked> |합계| 순</label></div></div><div class="tbl" id="flow-stock"></div></div>`;
   const showEv=(k, scroll)=>{
     const e=evs.find(x=>x.key===k); if(!e) return;
     document.querySelectorAll('#tab-flows tr[data-k]').forEach(tr=>tr.style.outline = tr.dataset.k===k? '2px solid var(--accent)':'' );
@@ -434,7 +480,7 @@ function renderSearch(){
 
 /* ---------- tabs ---------- */
 document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('section.tab').forEach(s=>s.classList.toggle('on',s.id==='tab-'+b.dataset.t));history.replaceState(null,'','#'+b.dataset.t);window.scrollTo({top:0});});
-renderDash(); renderCal(); renderSemi(); renderFlows(); renderKrx('kospi200',$('#tab-k200')); renderKrx('kosdaq150',$('#tab-kq150')); renderTop(); renderAdhoc(); renderEtf(); renderSearch();
+renderDash(); renderCal(); renderSemi(); renderHist(); renderFlows(); renderKrx('kospi200',$('#tab-k200')); renderKrx('kosdaq150',$('#tab-kq150')); renderTop(); renderAdhoc(); renderEtf(); renderSearch();
 if(location.hash){const b=document.querySelector(`#nav button[data-t="${location.hash.slice(1)}"]`); if(b) b.click();}
 </script>
 </body>

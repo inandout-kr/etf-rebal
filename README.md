@@ -16,6 +16,7 @@
 | `analyze.py` | KOSPI 200 / KOSDAQ 150 / KOSPI 100 정기변경 시뮬레이션, FnGuide TOP-N, 캡 트리거, 신규상장 특례, MSCI 후보 → `data/analysis.json` |
 | `rebal_flow.py` / `flow_engine.py` | KRX 반도체 9월 정기변경 및 남은 정기변경 전체의 종목별 패시브 매수/매도 추정 (공식 가중·캡 규칙) |
 | `backtest_june.py` | 2026년 6월 정기변경(KRX 5/22 공표)을 같은 로직으로 재현해 정답과 비교 → `data/backtest_june.json` |
+| `archive.py` | 매매일(적용일 전 영업일)이 되면 그날 아침 예측을 `data/history/`에 동결, 매매 후 프록시 ETF PDF로 실제 비중변화·편출입을 대조 → 히스토리 탭 |
 | `calendar_events.py` | 선물만기·심사기준일·정기변경일 등 일정 계산 (KRX 휴장일 내장) |
 | `methodology_kb.py` | 지수별 공식 방법론 요약 지식베이스 → `data/methodology.json` |
 | `build_site.py` + `template.html` | 정적 페이지 빌드 → `dist/` |
@@ -35,3 +36,4 @@
 - 유동비율(FIF)은 KODEX 200·KODEX 코스닥150·TIGER MSCI Korea ETF 비중에서 역산한 추정치입니다.
 - 심사대상기간이 진행 중이면(예: 12월 정기변경은 5월~10월) 현재까지의 누적 평균으로 계산한 "중간 집계"입니다.
 - KRX 주가지수운영위원회의 정성 판단(부적합 종목 등)은 반영되지 않습니다.
+- 매매가 끝난 정기변경은 활성 탭에서 빠지고 히스토리 탭으로 이동합니다. 스냅샷 파일(`data/history/*.json`)은 이후 갱신에서 덮어쓰지 않으며, 실제 결과는 ETF 실물 PDF 기준이라 지수 실제 비중과는 현금·선물·추적오차만큼 차이가 납니다.

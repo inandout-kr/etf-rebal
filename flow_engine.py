@@ -20,6 +20,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from calendar_events import prev_business_day
+
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).parent
 DATA = ROOT / "data"
@@ -168,6 +170,7 @@ def main():
         return list(cur), "?"
 
     out = {"generated": A["generated"], "events": [], "by_stock": {}}
+    today = date.today().isoformat()
     for cfg in CONFIGS:
         h = holdings.get(cfg["proxy"])
         if not h:
@@ -266,7 +269,11 @@ def main():
               "n_current": len(cur), "n_target": len(tgt), "adds": [r["name"] for r in rows if r["status"] == "신규편입"], "dels": [r["name"] for r in rows if r["status"] == "편출"],
               "total_buy": round(sum(r["flow_total"] for r in rows if r["flow_total"] > 0), 1), "total_sell": round(sum(r["flow_total"] for r in rows if r["flow_total"] < 0), 1),
               "rows": rows}
+        ev["trade_date"] = prev_business_day(date.fromisoformat(cfg["apply"][:10])).isoformat()   # 적용일 전 영업일 종가 매매
+        ev["passed"] = ev["trade_date"] < today
         out["events"].append(ev)
+        if ev["passed"]:   # 매매 끝난 이벤트: 스냅샷은 archive.py 가 보관, 합산·표시에서 제외
+            continue
         for r in rows:
             out["by_stock"].setdefault(r["code"], {"name": r["name"], "events": [], "total": 0.0})
             out["by_stock"][r["code"]]["events"].append({"key": cfg["key"], "index": cfg["name"], "apply": cfg["apply"], "flow": r["flow_total"], "status": r["status"], "adv_mult": r["adv_mult"]})
@@ -277,7 +284,7 @@ def main():
     if semi_p.exists():
         semi = json.loads(semi_p.read_text(encoding="utf-8"))
         sc = semi["scenarios"]["current"]
-        for r in sc["rows"]:
+        for r in (sc["rows"] if semi["expiry"] >= today else []):
             if not r.get("flow_total"):
                 continue
             out["by_stock"].setdefault(r["code"], {"name": r["name"], "events": [], "total": 0.0})

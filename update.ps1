@@ -27,6 +27,8 @@ if ($LASTEXITCODE -ne 0) { Write-Host "rebal_flow failed"; exit 1 }
 python flow_engine.py
 if ($LASTEXITCODE -ne 0) { Write-Host "flow_engine failed"; exit 1 }
 python backtest_june.py
+python archive.py
+if ($LASTEXITCODE -ne 0) { Write-Host "archive failed"; exit 1 }
 
 Write-Host "[4/5] build site..."
 python methodology_kb.py

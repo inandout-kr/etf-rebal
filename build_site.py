@@ -2,6 +2,7 @@
 """정적 사이트 빌드: data/analysis.json + etf_master.json + methodology.json → dist/index.html (데이터 내장)"""
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -22,6 +23,17 @@ def main():
     semi = json.loads((DATA / "krx_semi_rebal.json").read_text(encoding="utf-8")) if (DATA / "krx_semi_rebal.json").exists() else None
     flows = json.loads((DATA / "flows.json").read_text(encoding="utf-8")) if (DATA / "flows.json").exists() else None
     backtest = json.loads((DATA / "backtest_june.json").read_text(encoding="utf-8")) if (DATA / "backtest_june.json").exists() else None
+    today = date.today().isoformat()
+    if semi and semi["expiry"] < today:   # 매매 끝난 KRX 반도체 정기변경 → 히스토리 탭으로
+        semi = None
+    if flows:
+        flows["events"] = [e for e in flows["events"] if not e.get("passed")]
+    history = []
+    for p in sorted((DATA / "history").glob("*.json"), reverse=True):
+        h = json.loads(p.read_text(encoding="utf-8"))
+        h.pop("pdf_rows", None)
+        history.append(h)
+    history.sort(key=lambda h: h["trade_date"], reverse=True)
     keys = ["code", "name", "sector", "sector_src", "avg_mcap", "avg_trdval", "n_days", "mcap_rank", "n_exist", "n_sector",
             "rank_ratio", "cum_share", "trd_rank", "liq_ok", "primary", "status", "mktcap_now", "listing_date", "mcap15", "note",
             "is_cur", "cur_weight", "fif", "confidence", "conf_note", "ret_period", "risk"]
@@ -36,7 +48,7 @@ def main():
                 "trd_rank", "liq_ok", "mktcap_now", "fif", "fif_src", "w_cur_adj", "w_target", "delta", "capped", "flow_by_etf", "flow_total", "adv20", "adv_mult", "w_cur_etf"]
         for sc in semi["scenarios"].values():
             sc["rows"] = [{k: r.get(k) for k in keep if r.get(k) is not None} for r in sc["rows"] if r.get("is_cur") or r.get("in_midlarge")]
-    payload = {"analysis": a, "etfs": etfs, "kb": kb, "members": members, "semi": semi, "flows": flows, "backtest": backtest,
+    payload = {"analysis": a, "etfs": etfs, "kb": kb, "members": members, "semi": semi, "flows": flows, "backtest": backtest, "history": history,
                "proxy": {k: {"etf": v["etf_code"], "date": v["date"], "n": len(v["rows"])} for k, v in hold.items()}}
     html = (ROOT / "template.html").read_text(encoding="utf-8")
     js = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
