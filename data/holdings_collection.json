@@ -1,0 +1,221 @@
+{
+ "attempted_at": "2026-10-07T08:13:06",
+ "sources": {
+  "kospi200": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 201
+  },
+  "kosdaq150": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 150
+  },
+  "kospi100": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 100
+  },
+  "kospi": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 718
+  },
+  "kospi200_it": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 16
+  },
+  "k200s_fin": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 22
+  },
+  "k200s_enerchem": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 29
+  },
+  "k200s_ind": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 20
+  },
+  "k200s_const": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 10
+  },
+  "k200s_heavy": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 17
+  },
+  "k200s_steel": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 10
+  },
+  "k200s_staples": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 28
+  },
+  "k200s_discr": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 25
+  },
+  "k200s_comm": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 10
+  },
+  "k200s_health": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 14
+  },
+  "fn_top10": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 10
+  },
+  "msci_korea": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 74
+  },
+  "krx_semi": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 21
+  },
+  "krx_semi_tiger": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 21
+  },
+  "krx_semi_lev": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 32
+  },
+  "fn_semitop10": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 10
+  },
+  "fn_aitop2": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 15
+  },
+  "fn_ksemi": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 20
+  },
+  "fn_top5plus": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 10
+  },
+  "fn_battery": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 25
+  },
+  "fn_defense": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 10
+  },
+  "fn_ship": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 13
+  },
+  "fn_aitop3": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 20
+  },
+  "mkf_samsung": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 16
+  },
+  "mkf_hyundai": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 20
+  },
+  "valueup": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 100
+  },
+  "fn_sobujang": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 20
+  },
+  "fn_dividend": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 30
+  },
+  "fn_aitop2_sol": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 10
+  },
+  "wise_battery": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 29
+  },
+  "is_power": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 12
+  },
+  "kedi_power": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 10
+  },
+  "fn_semitop10_lev": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 14
+  },
+  "kospi200_it_lev": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 18
+  },
+  "kosdaq150_lev": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 156
+  },
+  "kospi200_lev": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 209
+  },
+  "kospi200_tiger": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 200
+  },
+  "kosdaq150_tiger": {
+   "status": "ok",
+   "as_of": "2026-10-06",
+   "rows": 150
+  }
+ },
+ "warning_count": 0
+}

@@ -7,6 +7,7 @@ KRX가 KOSPI 200 / KOSDAQ 150 / KRX 섹터지수 심사에 참고하는 GICS 분
 사용: python fetch_gics.py
 """
 import sqlite3
+import json
 import sys
 import time
 from datetime import date
@@ -43,7 +44,6 @@ def fetch_group(s, code, dt):
 
 def main():
     s = requests.Session()
-    s.get("https://index.krx.co.kr" + PAGE, headers=UA, timeout=30)
     dt = date.today().strftime("%Y%m%d")
     con = sqlite3.connect(DB)
     for col in ("gics_ig", "gics_ig_nm", "gics_sec"):
@@ -51,8 +51,7 @@ def main():
             con.execute(f"ALTER TABLE stock ADD COLUMN {col} TEXT")
         except sqlite3.OperationalError:
             pass
-    con.execute("UPDATE stock SET gics_ig=NULL, gics_ig_nm=NULL, gics_sec=NULL")
-    total, unmatched = 0, []
+    total, unmatched, failed = 0, [], []
     for code, nm in GROUPS.items():
         rows = None
         for attempt in range(3):
@@ -64,6 +63,11 @@ def main():
                 time.sleep(1.5)
         if rows is None:
             print("FAILED", code, nm)
+            failed.append(code)
+            continue
+        if not rows and con.execute("SELECT COUNT(*) FROM stock WHERE gics_ig=?", (code,)).fetchone()[0]:
+            failed.append(code)
+            print("EMPTY", code, nm, "(preserving prior classification)")
             continue
         n = 0
         for r in rows:
@@ -76,7 +80,11 @@ def main():
         total += n
         print(f"{code} {nm:14s} rows={len(rows):4d} matched={n}")
         time.sleep(0.4)
-    con.execute("INSERT OR REPLACE INTO meta VALUES('gics_date',?)", (dt,))
+    if total and not failed:
+        con.execute("INSERT OR REPLACE INTO meta VALUES('gics_date',?)", (dt,))
+    con.execute("INSERT OR REPLACE INTO meta VALUES('gics_collection',?)",
+                (json.dumps({"attempted_at": dt, "status": "warning" if failed else "ok",
+                             "matched": total, "failed_groups": failed}),))
     con.commit()
     print(f"total matched {total}; unmatched(비상장/우선주 등) {len(unmatched)} e.g. {unmatched[:8]}")
     print("common stocks without GICS:", con.execute("SELECT COUNT(*) FROM stock WHERE is_common=1 AND gics_ig IS NULL").fetchone()[0])

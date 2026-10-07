@@ -1,0 +1,16 @@
+{
+  "description": "가상 PDF. CU는 2배, ETF 좌수는 20% 증가. A/C 구성 변화만 계산하며 실제 시장매매는 미식별.",
+  "etf_code": "DEMO_ETF",
+  "as_of": "2026-09-10T15:30:00+09:00",
+  "available_at": "2026-09-11T08:10:00+09:00",
+  "kind": "pdf",
+  "cu_units": 20000,
+  "etf_units": 1200000,
+  "complete": true,
+  "corporate_actions_verified": true,
+  "rows": [
+    {"code": "DEMO_BUY_A", "count": 2200},
+    {"code": "DEMO_SELL_C", "count": 3800},
+    {"code": "DEMO_UNCHANGED", "count": 1000}
+  ]
+}

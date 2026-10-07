@@ -1,0 +1,37 @@
+{
+  "etf_code": "DEMO_ETF",
+  "as_of": "2026-09-11T13:05:00+09:00",
+  "baseline_as_of": "2026-09-08T15:30:00+09:00",
+  "current_as_of": "2026-09-10T15:30:00+09:00",
+  "classification": "composition_proxy",
+  "actual_market_execution_shares": null,
+  "warnings": [
+    "Complete basket composition changes do not distinguish market trading from in-kind flows or identify intraday execution timing."
+  ],
+  "rows": [
+    {
+      "code": "DEMO_BUY_A",
+      "baseline_shares_per_etf_share_adjusted": 0.1,
+      "current_shares_per_etf_share": 0.11,
+      "per_etf_share_change": 0.009999999999999995,
+      "exposure_transition_shares": 11999.999999999995,
+      "actual_market_execution_shares": null
+    },
+    {
+      "code": "DEMO_SELL_C",
+      "baseline_shares_per_etf_share_adjusted": 0.2,
+      "current_shares_per_etf_share": 0.19,
+      "per_etf_share_change": -0.010000000000000009,
+      "exposure_transition_shares": -12000.000000000011,
+      "actual_market_execution_shares": null
+    },
+    {
+      "code": "DEMO_UNCHANGED",
+      "baseline_shares_per_etf_share_adjusted": 0.05,
+      "current_shares_per_etf_share": 0.05,
+      "per_etf_share_change": 0.0,
+      "exposure_transition_shares": 0.0,
+      "actual_market_execution_shares": null
+    }
+  ]
+}

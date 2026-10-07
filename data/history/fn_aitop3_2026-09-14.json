@@ -1,0 +1,561 @@
+{
+ "key": "fn_aitop3",
+ "name": "FnGuide AI 반도체 TOP3+",
+ "apply": "2026-09-14",
+ "apply_start": "2026-09-14",
+ "trade_date": "2026-09-11",
+ "settle_date": "2026-09-11",
+ "fix": "9/10 만기일 종가",
+ "rules": "목표 구성: 구성종목 변경 없음 가정 · TOP3(재무스코어 상위, 현행 TOP3 유지 가정) 각 25% 고정 + 나머지 17종목 균등(1.47%). 종목 변경 미반영",
+ "proxy_etf": "469150",
+ "snapshot": {
+  "generated": "2026-09-11 08:13",
+  "saved": "2026-09-11 08:13",
+  "pdf_date": "2026-09-10",
+  "data_through": null,
+  "pre_trade": true
+ },
+ "etfs": [
+  {
+   "code": "469150",
+   "name": "ACE AI반도체TOP3+",
+   "aum_eok": 12033.0,
+   "notional_eok": 12033
+  }
+ ],
+ "notional_total": 12033,
+ "pdf_rows": {
+  "005930": 26.0,
+  "000660": 25.47,
+  "042700": 25.13,
+  "403870": 1.72,
+  "095340": 1.7,
+  "007660": 1.56,
+  "039030": 1.54,
+  "036930": 1.53,
+  "240810": 1.43,
+  "080220": 1.38,
+  "089030": 1.37,
+  "440110": 1.36,
+  "009150": 1.31,
+  "067310": 1.28,
+  "000990": 1.26,
+  "058470": 1.18,
+  "353200": 1.11,
+  "131970": 1.0,
+  "011070": 0.88,
+  "140860": 0.82
+ },
+ "default_scenario": "base",
+ "scenarios": {
+  "base": {
+   "desc": "공식 가중·캡 규칙 적용 예측",
+   "adds": [],
+   "dels": [],
+   "total_buy": 376.2,
+   "total_sell": -376.3,
+   "rows": [
+    {
+     "code": "005930",
+     "name": "삼성전자",
+     "status": "유지",
+     "w_cur": 26.255,
+     "w_target": 25.0,
+     "delta": -1.255,
+     "flow_total": -151.0,
+     "adv_mult": 0.003033412738267108,
+     "capped": false,
+     "fixed": true,
+     "flow_by_etf": {
+      "469150": -151.0
+     }
+    },
+    {
+     "code": "000660",
+     "name": "SK하이닉스",
+     "status": "유지",
+     "w_cur": 25.719,
+     "w_target": 25.0,
+     "delta": -0.719,
+     "flow_total": -86.6,
+     "adv_mult": 0.0014567096656519123,
+     "capped": false,
+     "fixed": true,
+     "flow_by_etf": {
+      "469150": -86.6
+     }
+    },
+    {
+     "code": "140860",
+     "name": "파크시스템스",
+     "status": "유지",
+     "w_cur": 0.828,
+     "w_target": 1.471,
+     "delta": 0.643,
+     "flow_total": 77.3,
+     "adv_mult": 1.2496969230761732,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 77.3
+     }
+    },
+    {
+     "code": "011070",
+     "name": "LG이노텍",
+     "status": "유지",
+     "w_cur": 0.889,
+     "w_target": 1.471,
+     "delta": 0.582,
+     "flow_total": 70.0,
+     "adv_mult": 0.047085907428835984,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 70.0
+     }
+    },
+    {
+     "code": "131970",
+     "name": "두산테스나",
+     "status": "유지",
+     "w_cur": 1.01,
+     "w_target": 1.471,
+     "delta": 0.461,
+     "flow_total": 55.4,
+     "adv_mult": 0.26041346649184227,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 55.4
+     }
+    },
+    {
+     "code": "042700",
+     "name": "한미반도체",
+     "status": "유지",
+     "w_cur": 25.376,
+     "w_target": 25.0,
+     "delta": -0.376,
+     "flow_total": -45.3,
+     "adv_mult": 0.0319201256336405,
+     "capped": false,
+     "fixed": true,
+     "flow_by_etf": {
+      "469150": -45.3
+     }
+    },
+    {
+     "code": "353200",
+     "name": "대덕전자",
+     "status": "유지",
+     "w_cur": 1.121,
+     "w_target": 1.471,
+     "delta": 0.35,
+     "flow_total": 42.1,
+     "adv_mult": 0.05122206800202507,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 42.1
+     }
+    },
+    {
+     "code": "058470",
+     "name": "리노공업",
+     "status": "유지",
+     "w_cur": 1.192,
+     "w_target": 1.471,
+     "delta": 0.279,
+     "flow_total": 33.6,
+     "adv_mult": 0.08358712508263594,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 33.6
+     }
+    },
+    {
+     "code": "403870",
+     "name": "HPSP",
+     "status": "유지",
+     "w_cur": 1.737,
+     "w_target": 1.471,
+     "delta": -0.266,
+     "flow_total": -32.0,
+     "adv_mult": 0.022244402042043847,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": -32.0
+     }
+    },
+    {
+     "code": "095340",
+     "name": "ISC",
+     "status": "유지",
+     "w_cur": 1.717,
+     "w_target": 1.471,
+     "delta": -0.246,
+     "flow_total": -29.6,
+     "adv_mult": 0.09720802510910627,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": -29.6
+     }
+    },
+    {
+     "code": "000990",
+     "name": "DB하이텍",
+     "status": "유지",
+     "w_cur": 1.272,
+     "w_target": 1.471,
+     "delta": 0.198,
+     "flow_total": 23.9,
+     "adv_mult": 0.050992991551474076,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 23.9
+     }
+    },
+    {
+     "code": "067310",
+     "name": "하나마이크론",
+     "status": "유지",
+     "w_cur": 1.293,
+     "w_target": 1.471,
+     "delta": 0.178,
+     "flow_total": 21.4,
+     "adv_mult": 0.03497158974112873,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 21.4
+     }
+    },
+    {
+     "code": "009150",
+     "name": "삼성전기",
+     "status": "유지",
+     "w_cur": 1.323,
+     "w_target": 1.471,
+     "delta": 0.148,
+     "flow_total": 17.8,
+     "adv_mult": 0.002044503584032218,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 17.8
+     }
+    },
+    {
+     "code": "007660",
+     "name": "이수페타시스",
+     "status": "유지",
+     "w_cur": 1.575,
+     "w_target": 1.471,
+     "delta": -0.105,
+     "flow_total": -12.6,
+     "adv_mult": 0.019697125545701098,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": -12.6
+     }
+    },
+    {
+     "code": "440110",
+     "name": "파두",
+     "status": "유지",
+     "w_cur": 1.373,
+     "w_target": 1.471,
+     "delta": 0.097,
+     "flow_total": 11.7,
+     "adv_mult": 0.03524224568115224,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 11.7
+     }
+    },
+    {
+     "code": "089030",
+     "name": "테크윙",
+     "status": "유지",
+     "w_cur": 1.383,
+     "w_target": 1.471,
+     "delta": 0.087,
+     "flow_total": 10.5,
+     "adv_mult": 0.04384463972457085,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 10.5
+     }
+    },
+    {
+     "code": "039030",
+     "name": "이오테크닉스",
+     "status": "유지",
+     "w_cur": 1.555,
+     "w_target": 1.471,
+     "delta": -0.084,
+     "flow_total": -10.2,
+     "adv_mult": 0.018233305108281084,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": -10.2
+     }
+    },
+    {
+     "code": "080220",
+     "name": "제주반도체",
+     "status": "유지",
+     "w_cur": 1.394,
+     "w_target": 1.471,
+     "delta": 0.077,
+     "flow_total": 9.3,
+     "adv_mult": 0.008707509379359232,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 9.3
+     }
+    },
+    {
+     "code": "036930",
+     "name": "주성엔지니어링",
+     "status": "유지",
+     "w_cur": 1.545,
+     "w_target": 1.471,
+     "delta": -0.074,
+     "flow_total": -9.0,
+     "adv_mult": 0.003953413058016129,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": -9.0
+     }
+    },
+    {
+     "code": "240810",
+     "name": "원익IPS",
+     "status": "유지",
+     "w_cur": 1.444,
+     "w_target": 1.471,
+     "delta": 0.027,
+     "flow_total": 3.2,
+     "adv_mult": 0.003937269084442324,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "469150": 3.2
+     }
+    }
+   ]
+  }
+ },
+ "actual": {
+  "pdf_date": "2026-09-14",
+  "adds": [
+   "심텍",
+   "테스",
+   "피에스케이"
+  ],
+  "dels": [
+   "두산테스나",
+   "주성엔지니어링",
+   "파크시스템스"
+  ],
+  "rows": {
+   "000990": {
+    "name": "DB하이텍",
+    "w_old": 1.357,
+    "w_new": 1.56,
+    "delta": 0.203,
+    "flow": 24.4
+   },
+   "095340": {
+    "name": "ISC",
+    "w_old": 1.766,
+    "w_new": 1.52,
+    "delta": -0.246,
+    "flow": -29.6
+   },
+   "036930": {
+    "name": "주성엔지니어링",
+    "w_old": 1.556,
+    "w_new": 0.0,
+    "delta": -1.556,
+    "flow": -187.2
+   },
+   "058470": {
+    "name": "리노공업",
+    "w_old": 1.213,
+    "w_new": 1.51,
+    "delta": 0.297,
+    "flow": 35.7
+   },
+   "011070": {
+    "name": "LG이노텍",
+    "w_old": 0.887,
+    "w_new": 1.49,
+    "delta": 0.603,
+    "flow": 72.5
+   },
+   "403870": {
+    "name": "HPSP",
+    "w_old": 1.747,
+    "w_new": 1.51,
+    "delta": -0.237,
+    "flow": -28.6
+   },
+   "042700": {
+    "name": "한미반도체",
+    "w_old": 24.91,
+    "w_new": 24.35,
+    "delta": -0.56,
+    "flow": -67.4
+   },
+   "222800": {
+    "name": "심텍",
+    "w_old": 0.0,
+    "w_new": 1.5,
+    "delta": 1.5,
+    "flow": 180.5
+   },
+   "005930": {
+    "name": "삼성전자",
+    "w_old": 26.653,
+    "w_new": 25.34,
+    "delta": -1.313,
+    "flow": -158.0
+   },
+   "140860": {
+    "name": "파크시스템스",
+    "w_old": 0.892,
+    "w_new": 0.0,
+    "delta": -0.892,
+    "flow": -107.3
+   },
+   "240810": {
+    "name": "원익IPS",
+    "w_old": 1.463,
+    "w_new": 1.49,
+    "delta": 0.027,
+    "flow": 3.3
+   },
+   "353200": {
+    "name": "대덕전자",
+    "w_old": 1.149,
+    "w_new": 1.52,
+    "delta": 0.371,
+    "flow": 44.7
+   },
+   "440110": {
+    "name": "파두",
+    "w_old": 1.149,
+    "w_new": 1.23,
+    "delta": 0.081,
+    "flow": 9.7
+   },
+   "080220": {
+    "name": "제주반도체",
+    "w_old": 1.358,
+    "w_new": 1.44,
+    "delta": 0.082,
+    "flow": 9.8
+   },
+   "319660": {
+    "name": "피에스케이",
+    "w_old": 0.0,
+    "w_new": 1.43,
+    "delta": 1.43,
+    "flow": 172.1
+   },
+   "095610": {
+    "name": "테스",
+    "w_old": 0.0,
+    "w_new": 1.37,
+    "delta": 1.37,
+    "flow": 164.9
+   },
+   "039030": {
+    "name": "이오테크닉스",
+    "w_old": 1.598,
+    "w_new": 1.51,
+    "delta": -0.088,
+    "flow": -10.6
+   },
+   "089030": {
+    "name": "테크윙",
+    "w_old": 1.329,
+    "w_new": 1.42,
+    "delta": 0.091,
+    "flow": 10.9
+   },
+   "131970": {
+    "name": "두산테스나",
+    "w_old": 1.015,
+    "w_new": 0.0,
+    "delta": -1.015,
+    "flow": -122.1
+   },
+   "009150": {
+    "name": "삼성전기",
+    "w_old": 1.373,
+    "w_new": 1.56,
+    "delta": 0.187,
+    "flow": 22.5
+   },
+   "000660": {
+    "name": "SK하이닉스",
+    "w_old": 25.671,
+    "w_new": 25.09,
+    "delta": -0.581,
+    "flow": -69.9
+   },
+   "007660": {
+    "name": "이수페타시스",
+    "w_old": 1.618,
+    "w_new": 1.53,
+    "delta": -0.088,
+    "flow": -10.6
+   },
+   "067310": {
+    "name": "하나마이크론",
+    "w_old": 1.296,
+    "w_new": 1.5,
+    "delta": 0.204,
+    "flow": 24.5
+   }
+  },
+  "total_buy": 775.5,
+  "total_sell": -791.3,
+  "by_scenario": {
+   "base": {
+    "adds_hit": [],
+    "adds_fp": [],
+    "adds_miss": [
+     "심텍",
+     "테스",
+     "피에스케이"
+    ],
+    "dels_hit": [],
+    "dels_fp": [],
+    "dels_miss": [
+     "두산테스나",
+     "주성엔지니어링",
+     "파크시스템스"
+    ],
+    "n_pairs": 19,
+    "dir_hit": 0.8947368421052632,
+    "corr": 0.44733966196851815
+   }
+  },
+  "computed": "2026-09-15 17:03"
+ }
+}

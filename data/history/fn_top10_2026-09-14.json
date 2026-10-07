@@ -1,0 +1,356 @@
+{
+ "key": "fn_top10",
+ "name": "FnGuide TOP10",
+ "apply": "2026-09-14",
+ "apply_start": "2026-09-14",
+ "trade_date": "2026-09-11",
+ "settle_date": "2026-09-11",
+ "fix": "9/10 만기일 종가로 비중 확정",
+ "rules": "목표 구성: analyze.py 예측 (편입 ['삼성전기', '삼성물산'] / 편출 ['셀트리온', 'NAVER']) · 선정(8/31 기준 20영업일 유동시총 평균 상위10) 확정 · 유동비율은 ETF 비중 역산 추정",
+ "proxy_etf": "292150",
+ "snapshot": {
+  "generated": "2026-09-11 08:13",
+  "saved": "2026-09-11 08:13",
+  "pdf_date": "2026-09-10",
+  "data_through": null,
+  "pre_trade": true
+ },
+ "etfs": [
+  {
+   "code": "292150",
+   "name": "TIGER 코리아TOP10",
+   "aum_eok": 21161.0,
+   "notional_eok": 21161
+  }
+ ],
+ "notional_total": 21161,
+ "pdf_rows": {
+  "000660": 38.25,
+  "005930": 27.46,
+  "005380": 5.82,
+  "105560": 5.67,
+  "055550": 4.54,
+  "034020": 4.34,
+  "012450": 4.11,
+  "000270": 3.46,
+  "068270": 3.1,
+  "035420": 3.01
+ },
+ "default_scenario": "base",
+ "scenarios": {
+  "base": {
+   "desc": "공식 가중·캡 규칙 적용 예측",
+   "adds": [
+    "삼성전기",
+    "삼성물산"
+   ],
+   "dels": [
+    "셀트리온",
+    "NAVER"
+   ],
+   "total_buy": 4654.0,
+   "total_sell": -4653.9,
+   "rows": [
+    {
+     "code": "000660",
+     "name": "SK하이닉스",
+     "status": "유지",
+     "w_cur": 38.342,
+     "w_target": 25.0,
+     "delta": -13.342,
+     "flow_total": -2823.3,
+     "adv_mult": 0.047504942609414035,
+     "capped": true,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": -2823.3
+     }
+    },
+    {
+     "code": "009150",
+     "name": "삼성전기",
+     "status": "신규편입",
+     "w_cur": 0.0,
+     "w_target": 11.393,
+     "delta": 11.393,
+     "flow_total": 2410.8,
+     "adv_mult": 0.2772221156227966,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": 2410.8
+     }
+    },
+    {
+     "code": "028260",
+     "name": "삼성물산",
+     "status": "신규편입",
+     "w_cur": 0.0,
+     "w_target": 5.316,
+     "delta": 5.316,
+     "flow_total": 1125.0,
+     "adv_mult": 0.8479056245477685,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": 1125.0
+     }
+    },
+    {
+     "code": "068270",
+     "name": "셀트리온",
+     "status": "편출",
+     "w_cur": 3.107,
+     "w_target": 0,
+     "delta": -3.107,
+     "flow_total": -657.6,
+     "adv_mult": 0.9098007550586936,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": -657.6
+     }
+    },
+    {
+     "code": "035420",
+     "name": "NAVER",
+     "status": "편출",
+     "w_cur": 3.017,
+     "w_target": 0,
+     "delta": -3.017,
+     "flow_total": -638.5,
+     "adv_mult": 0.4017857993237777,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": -638.5
+     }
+    },
+    {
+     "code": "005930",
+     "name": "삼성전자",
+     "status": "유지",
+     "w_cur": 27.526,
+     "w_target": 25.0,
+     "delta": -2.526,
+     "flow_total": -534.5,
+     "adv_mult": 0.010740098357099458,
+     "capped": true,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": -534.5
+     }
+    },
+    {
+     "code": "005380",
+     "name": "현대차",
+     "status": "유지",
+     "w_cur": 5.834,
+     "w_target": 6.935,
+     "delta": 1.101,
+     "flow_total": 232.9,
+     "adv_mult": 0.10079662573159273,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": 232.9
+     }
+    },
+    {
+     "code": "105560",
+     "name": "KB금융",
+     "status": "유지",
+     "w_cur": 5.684,
+     "w_target": 6.756,
+     "delta": 1.072,
+     "flow_total": 226.9,
+     "adv_mult": 0.1297412428006509,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": 226.9
+     }
+    },
+    {
+     "code": "055550",
+     "name": "신한지주",
+     "status": "유지",
+     "w_cur": 4.551,
+     "w_target": 5.409,
+     "delta": 0.859,
+     "flow_total": 181.7,
+     "adv_mult": 0.17132735666011625,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": 181.7
+     }
+    },
+    {
+     "code": "034020",
+     "name": "두산에너빌리티",
+     "status": "유지",
+     "w_cur": 4.35,
+     "w_target": 5.171,
+     "delta": 0.821,
+     "flow_total": 173.7,
+     "adv_mult": 0.06862710593858719,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": 173.7
+     }
+    },
+    {
+     "code": "012450",
+     "name": "한화에어로스페이스",
+     "status": "유지",
+     "w_cur": 4.12,
+     "w_target": 4.897,
+     "delta": 0.777,
+     "flow_total": 164.5,
+     "adv_mult": 0.1077559778834618,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": 164.5
+     }
+    },
+    {
+     "code": "000270",
+     "name": "기아",
+     "status": "유지",
+     "w_cur": 3.468,
+     "w_target": 4.123,
+     "delta": 0.654,
+     "flow_total": 138.5,
+     "adv_mult": 0.14803475295198718,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "292150": 138.5
+     }
+    }
+   ]
+  }
+ },
+ "actual": {
+  "pdf_date": "2026-09-14",
+  "adds": [
+   "삼성물산",
+   "삼성전기"
+  ],
+  "dels": [
+   "NAVER",
+   "셀트리온"
+  ],
+  "rows": {
+   "055550": {
+    "name": "신한지주",
+    "w_old": 5.03,
+    "w_new": 6.03,
+    "delta": 1.0,
+    "flow": 211.5
+   },
+   "000270": {
+    "name": "기아",
+    "w_old": 3.576,
+    "w_new": 4.38,
+    "delta": 0.804,
+    "flow": 170.2
+   },
+   "005380": {
+    "name": "현대차",
+    "w_old": 5.843,
+    "w_new": 7.2,
+    "delta": 1.357,
+    "flow": 287.1
+   },
+   "035420": {
+    "name": "NAVER",
+    "w_old": 3.122,
+    "w_new": 0.0,
+    "delta": -3.122,
+    "flow": -660.6
+   },
+   "005930": {
+    "name": "삼성전자",
+    "w_old": 26.958,
+    "w_new": 24.12,
+    "delta": -2.838,
+    "flow": -600.6
+   },
+   "028260": {
+    "name": "삼성물산",
+    "w_old": 0.0,
+    "w_new": 5.0,
+    "delta": 5.0,
+    "flow": 1058.0
+   },
+   "034020": {
+    "name": "두산에너빌리티",
+    "w_old": 4.392,
+    "w_new": 5.44,
+    "delta": 1.048,
+    "flow": 221.9
+   },
+   "009150": {
+    "name": "삼성전기",
+    "w_old": 0.0,
+    "w_new": 10.61,
+    "delta": 10.61,
+    "flow": 2245.2
+   },
+   "000660": {
+    "name": "SK하이닉스",
+    "w_old": 36.92,
+    "w_new": 23.86,
+    "delta": -13.06,
+    "flow": -2763.5
+   },
+   "068270": {
+    "name": "셀트리온",
+    "w_old": 3.225,
+    "w_new": 0.0,
+    "delta": -3.225,
+    "flow": -682.5
+   },
+   "012450": {
+    "name": "한화에어로스페이스",
+    "w_old": 4.638,
+    "w_new": 5.63,
+    "delta": 0.992,
+    "flow": 209.9
+   },
+   "105560": {
+    "name": "KB금융",
+    "w_old": 6.297,
+    "w_new": 7.31,
+    "delta": 1.013,
+    "flow": 214.4
+   }
+  },
+  "total_buy": 4618.2,
+  "total_sell": -4707.2,
+  "by_scenario": {
+   "base": {
+    "adds_hit": [
+     "삼성물산",
+     "삼성전기"
+    ],
+    "adds_fp": [],
+    "adds_miss": [],
+    "dels_hit": [
+     "NAVER",
+     "셀트리온"
+    ],
+    "dels_fp": [],
+    "dels_miss": [],
+    "n_pairs": 12,
+    "dir_hit": 1.0,
+    "corr": 0.9989656296912864
+   }
+  },
+  "computed": "2026-09-15 17:03"
+ }
+}

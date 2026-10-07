@@ -26,15 +26,25 @@ ROW_KEYS = ["code", "name", "status", "w_cur", "w_target", "delta", "flow_total"
 
 
 def parse_apply(s):
-    """'2026-09-14' / '2026-09-14~16 (3영업일 분할)' → (start, end) ISO"""
-    m = re.match(r"(\d{4}-\d{2}-\d{2})(?:~(\d{2}))?", s)
+    """단일 적용일 / 전체 ISO 날짜 범위 / 기존 같은 달의 '~DD' 범위."""
+    m = re.fullmatch(r"\s*(\d{4}-\d{2}-\d{2})(?:\s*~\s*(\d{4}-\d{2}-\d{2}|\d{2}))?(?:\s+\([^)]*\))?\s*", s or "")
+    if not m:
+        raise ValueError(f"적용일 형식이 잘못되었습니다: {s!r}")
     start = m.group(1)
-    end = start[:8] + m.group(2) if m.group(2) else start
+    end = m.group(2) or start
+    if len(end) == 2:
+        end = start[:8] + end
+    if date.fromisoformat(end) < date.fromisoformat(start):
+        raise ValueError(f"마지막 적용일이 시작일보다 빠릅니다: {s!r}")
     return start, end
 
 
-def event_dates(apply):
+def event_dates(apply, apply_end=None):
     start, end = parse_apply(apply)
+    if apply_end is not None:
+        end = date.fromisoformat(apply_end).isoformat()
+        if end < start:
+            raise ValueError("마지막 적용일이 시작일보다 빠릅니다.")
     trade = prev_business_day(date.fromisoformat(start)).isoformat()
     settle = prev_business_day(date.fromisoformat(end)).isoformat()   # 마지막 매매일
     return start, trade, settle
@@ -71,7 +81,8 @@ def from_semi(semi, holdings, generated):
 
 
 def from_flow(ev, holdings, generated):
-    start, trade, settle = event_dates(ev["apply"])
+    apply_end = ev.get("apply_end") or (ev.get("window") or {}).get("apply_end")
+    start, trade, settle = event_dates(ev["apply"], apply_end)
     pdf = next(v for v in holdings.values() if v["etf_code"] == ev["proxy_etf"])
     return {
         "key": ev["key"], "name": ev["name"], "apply": ev["apply"], "apply_start": start, "trade_date": trade, "settle_date": settle,

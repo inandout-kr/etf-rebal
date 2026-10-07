@@ -6,7 +6,7 @@
   - 정기변경일(KRX 대표지수) = 6·12월 최종거래일의 다음 매매거래일
   - 심사기준일 = 정기변경일이 속한 월의 전전월 최종 매매거래일
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 # KRX 휴장일 (2026~2027, 확인된 공휴일/대체공휴일 기준. 임시공휴일 발생 시 갱신 필요)
 HOLIDAYS = {
@@ -85,20 +85,93 @@ def krx_regular(y, m):
             "announce": f"{y}-{m-1:02d} 중 (주가지수운영위원회 심의 후 KRX 공표)"}
 
 
-REVIEW_WINDOWS = {
-    "kospi200": krx_regular(2026, 12),
-    "kosdaq150": krx_regular(2026, 12),
-    "kospi200_next": krx_regular(2027, 6),
+CALENDAR_YEARS = {2026, 2027}
+
+# (정기변경월, 만기 이후 적용 규칙, 분할 적용 영업일 수)
+CYCLE_RULES = {
+    "kospi200": ((6, 12), 1, 1), "kosdaq150": ((6, 12), 1, 1),
+    "kospi100": ((6, 12), 1, 1), "kospi200_it": ((6, 12), 1, 1),
+    "krx_semi": ((9,), 1, 1), "fn_top10": ((3, 9), 2, 1),
+    "fn_semitop10": ((4, 10), "next_week", 1),
+    "fn_aitop2": ((1, 4, 7, 10), 2, 1), "fn_aitop2_sol": ((1, 4, 7, 10), 2, 1),
+    "fn_battery": ((3, 6, 9, 12), "next_week", 3),
+    "fn_aitop3": ((3, 6, 9, 12), 2, 1), "fn_ship": ((2, 5, 8, 11), 2, 1),
+    "wise_battery": ((1, 4, 7, 10), 1, 1), "mkf_samsung": ((6, 12), "month_second", 5),
+    "fn_ksemi": ((6, 12), 4, 2), "fn_defense": ((6, 12), 2, 1),
+    "fn_sobujang": ((6, 12), 2, 1), "is_power": ((6, 12), "next_week", 1),
+    "kedi_power": ((6, 12), 3, 1), "fn_top5plus": ((6, 12), "next_week", 1),
 }
 
 
+def next_cycle(key, today=None):
+    """진행 중(마지막 적용일까지) 또는 다음 회차. 날짜는 방법론 규칙 계산값."""
+    today = today or datetime.now(timezone(timedelta(hours=9))).date()
+    months, rule, span = CYCLE_RULES[key]
+    for y in range(today.year, today.year + 2):
+        for m in months:
+            expiry = futures_last_trading_day(y, m)
+            if rule == "next_week":
+                apply = next_week_first_bday(expiry)
+            elif rule == "month_second":
+                apply = next_business_day(first_business_day_of_month(y, m))
+            else:
+                apply = next_business_day(expiry, rule)
+            end = next_business_day(apply, span - 1)
+            if end < today:
+                continue
+            if key in ("kospi200", "kosdaq150", "kospi100", "kospi200_it"):
+                result = krx_regular(y, m)
+            else:
+                ref_m = m - (2 if key == "krx_semi" else 1)
+                ref_y = y
+                if ref_m <= 0:
+                    ref_y, ref_m = y - 1, ref_m + 12
+                ref = last_business_day_of_month(ref_y, ref_m)
+                start = date(ref_y, ref_m - 2, 1) if key == "krx_semi" else date(ref_y, ref_m, 1)
+                if key == "fn_top10":
+                    start = prev_business_day(ref, 19)
+                result = {"period_start": start.strftime("%Y%m%d"), "period_end": ref.strftime("%Y%m%d"), "ref_date": ref.strftime("%Y%m%d")}
+            fix = expiry
+            if key in ("fn_ship", "fn_sobujang"):
+                fix = prev_business_day(expiry)
+            elif key == "fn_ksemi":
+                fix = next_business_day(expiry, 2)
+            elif key == "mkf_samsung":
+                fix = last_business_day_of_month(y, m - 1)
+            elif key in ("fn_semitop10", "fn_top5plus"):
+                fix = prev_business_day(apply, 2)
+            years = {y, int(result["period_start"][:4])}
+            result.update(expiry=expiry.isoformat(), apply=apply.isoformat(), apply_end=end.isoformat(),
+                          trade_date=prev_business_day(apply).isoformat(),
+                          trade_end=prev_business_day(end).isoformat(), fix_date=fix.isoformat(),
+                          date_status="calendar_rule", calendar_coverage="covered" if years <= CALENDAR_YEARS else "partial")
+            return result
+    raise ValueError(f"정기변경 회차를 찾을 수 없습니다: {key}")
+
+
+def review_windows(today=None):
+    current = next_cycle("kospi200", today)
+    following = next_cycle("kospi200", date.fromisoformat(current["apply_end"]) + timedelta(days=1))
+    return {"kospi200": current, "kosdaq150": dict(current), "kospi200_next": following}
+
+
+def review_availability(window, as_of):
+    return "pending_review" if window["period_start"] > as_of else "ready"
+
+
+REVIEW_WINDOWS = review_windows()
+
+
 def _ev(d, index, event, etfs, source, kind="정기", note=""):
-    return {"date": d.isoformat() if isinstance(d, date) else d, "index": index, "event": event, "etfs": etfs, "source": source, "kind": kind, "note": note}
+    status = "provisional" if "예시" in note else ("official" if "ir_dates" in source else "calendar_rule")
+    return {"date": d.isoformat() if isinstance(d, date) else d, "index": index, "event": event, "etfs": etfs, "source": source, "kind": kind, "note": note, "date_status": status}
 
 
-def build_events(y0=2026, y1=2027):
+def build_events(y0=None, y1=None):
+    y0 = y0 or datetime.now(timezone(timedelta(hours=9))).year
+    y1 = y1 or y0 + 1
     ev = []
-    for y in (y0, y1):
+    for y in range(y0, y1 + 1):
         for m in (6, 12):
             r = krx_regular(y, m)
             ev += [
@@ -166,7 +239,7 @@ def build_events(y0=2026, y1=2027):
         ev.append(_ev(ann, "MSCI Korea", f"{q} 발표", "TIGER MSCI Korea TR·KODEX MSCI Korea TR", "MSCI ir_dates.csv (2026-08-12)"))
         ev.append(_ev(prev_business_day(date.fromisoformat(eff)), "MSCI Korea", f"{q} 효력 (해당일 종가 리밸런싱, 익일 effective)", "TIGER MSCI Korea TR·KODEX MSCI Korea TR", "MSCI ir_dates.csv"))
     # 월간 선물옵션 만기 (신규상장 특례편입 교체일 후보)
-    for y in (y0, y1):
+    for y in range(y0, y1 + 1):
         for m in range(1, 13):
             e = futures_last_trading_day(y, m)
             ev.append(_ev(next_business_day(e), "KOSPI 200 / KOSDAQ 150 (신규상장 특례)", "선물 최근월물 최종거래일 다음 매매거래일 — 특례편입 교체 후보일", "-", "KRX 방법론 8.2", kind="수시"))
@@ -178,7 +251,7 @@ def events_upcoming(today, days=300):
     lo = today.isoformat()
     hi = (today + timedelta(days=days)).isoformat()
     out = []
-    for e in build_events():
+    for e in build_events(today.year, (today + timedelta(days=days)).year):
         if lo <= e["date"] <= hi:
             e["dday"] = (date.fromisoformat(e["date"]) - today).days
             out.append(e)

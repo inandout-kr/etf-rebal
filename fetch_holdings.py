@@ -7,9 +7,11 @@
 출력: data/holdings.json  { etf_code: {"name":..., "date":..., "rows":[{"name","code","weight","count"}]} }
 """
 import json
+import math
 import re
 import sqlite3
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -69,6 +71,7 @@ CASH = ("현금", "예금", "설정현금", "USD", "달러")
 
 def fetch_cu(session, code):
     r = session.get(f"https://navercomp.wisereport.co.kr/v2/ETF/index.aspx?cmp_cd={code}", headers=UA, timeout=20)
+    r.raise_for_status()
     r.encoding = "utf-8"
     m = re.search(r"var CU_data = (\{.*?\});", r.text, re.S)
     if not m:
@@ -87,34 +90,79 @@ def fetch_cu(session, code):
     return name, rows
 
 
+def validate_holdings(entry, previous=None):
+    """Cash is omitted; leveraged ETF futures can have null weights."""
+    rows = entry.get("rows") or []
+    if not rows or not entry.get("etf_code") or not entry.get("etf_name"):
+        raise ValueError("비어 있거나 잘못된 ETF 구성 응답")
+    datetime.strptime(entry.get("date") or "", "%Y-%m-%d")
+    if previous and len(rows) < len(previous.get("rows", [])) * .5:
+        raise ValueError("기존 구성의 절반 미만인 응답")
+    total, weighted, codes = 0, 0, set()
+    for row in rows:
+        if not row.get("name") or row.get("date") != entry["date"]:
+            raise ValueError("구성종목 이름/기준일 오류")
+        if row.get("code"):
+            if row["code"] in codes:
+                raise ValueError("구성종목 코드 중복")
+            codes.add(row["code"])
+        for key in ("weight", "count"):
+            value = row.get(key)
+            if value is None and key == "weight" and not row.get("code"):
+                continue
+            if not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+                raise ValueError(f"구성종목 {key} 오류")
+        if row.get("weight") is not None:
+            total += row["weight"]
+            weighted += 1
+    if not codes or not weighted or not 50 <= total <= 250:
+        raise ValueError("주식 구성/비중 합계 오류")
+    if previous and previous.get("date", "") > entry["date"]:
+        raise ValueError("기존 자료보다 과거 기준일인 응답")
+
+
+def collect_holdings(session, by_name, previous, proxies=None, fetcher=fetch_cu):
+    out = dict(previous)
+    status = {}
+    for key, code in (proxies or PROXY).items():
+        try:
+            name, rows = fetcher(session, code)
+            for row in rows or []:
+                cands = by_name.get(row["name"]) or []
+                common = [c for c in cands if c[0].endswith("0")]
+                row["code"] = (common or cands)[0][0] if cands else None
+            entry = {"etf_code": code, "etf_name": name, "date": rows[0].get("date") if rows else None, "rows": rows}
+            validate_holdings(entry, previous.get(key))
+            out[key] = entry
+            status[key] = {"status": "ok", "as_of": entry["date"], "rows": len(rows)}
+        except (requests.RequestException, ValueError, TypeError, KeyError, IndexError) as exc:
+            status[key] = {"status": "cached" if key in previous else "missing",
+                           "as_of": previous.get(key, {}).get("date"), "error": str(exc)}
+        print(f"  {key:20s} {status[key]['status']} as of {status[key].get('as_of')}")
+    return out, {"attempted_at": datetime.now().isoformat(timespec="seconds"), "sources": status,
+                 "warning_count": sum(s["status"] != "ok" for s in status.values())}
+
+
+def atomic_json(path, value):
+    temp = path.with_suffix(path.suffix + ".tmp")
+    temp.write_text(json.dumps(value, ensure_ascii=False, indent=1, allow_nan=False), encoding="utf-8")
+    temp.replace(path)
+
+
 def main():
     con = sqlite3.connect(ROOT / "data" / "market.sqlite")
     by_name = {}
     for code, name, mkt in con.execute("SELECT code, name, market FROM stock"):
         by_name.setdefault(name, []).append((code, mkt))
-    s = requests.Session()
-    out = {}
-    for key, code in PROXY.items():
-        name, rows = fetch_cu(s, code)
-        if rows is None:
-            print(f"  ! {key} {code}: CU_data 없음")
-            continue
-        unmatched = []
-        for r in rows:
-            cands = by_name.get(r["name"]) or []
-            if len(cands) == 1:
-                r["code"] = cands[0][0]
-            elif len(cands) > 1:
-                # 보통주(끝자리 0) 우선
-                common = [c for c in cands if c[0].endswith("0")]
-                r["code"] = (common or cands)[0][0]
-            else:
-                r["code"] = None
-                unmatched.append(r["name"])
-        date = rows[0]["date"] if rows else None
-        out[key] = {"etf_code": code, "etf_name": name, "date": date, "rows": rows}
-        print(f"  {key:14s} {code} {name} rows={len(rows)} date={date} unmatched={unmatched[:6]}")
-    (ROOT / "data" / "holdings.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    con.close()
+    path = ROOT / "data" / "holdings.json"
+    previous = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    with requests.Session() as session:
+        out, metadata = collect_holdings(session, by_name, previous)
+    atomic_json(ROOT / "data" / "holdings_collection.json", metadata)
+    if any(s["status"] == "missing" for s in metadata["sources"].values()):
+        raise RuntimeError("필수 ETF 구성 수집 실패: 기존 holdings.json 보존")
+    atomic_json(path, out)
     print("saved data/holdings.json")
 
 

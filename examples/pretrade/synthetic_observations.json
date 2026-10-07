@@ -1,0 +1,40 @@
+[
+  {
+    "description": "가상 누적 수급. 초기 스냅샷; 다음 누적치에 합산하지 않음.",
+    "event_id": "DEMO_2026-09-14",
+    "window_start": "2026-09-11T09:00:00+09:00",
+    "as_of": "2026-09-11T11:00:00+09:00",
+    "available_at": "2026-09-11T11:02:00+09:00",
+    "kind": "cumulative",
+    "rows": [
+      {"code": "DEMO_BUY_A", "net_buy_shares": 300000, "background_shares": 100000, "error_bound_shares": 50000},
+      {"code": "DEMO_BUY_B", "net_buy_shares": 70000, "background_shares": -30000, "error_bound_shares": 25000},
+      {"code": "DEMO_SELL_C", "net_buy_shares": -210000, "background_shares": -50000, "error_bound_shares": 40000},
+      {"code": "DEMO_SELL_D", "net_buy_shares": -60000, "background_shares": 20000, "error_bound_shares": 20000}
+    ],
+    "attribution_scenarios": [
+      {"label": "ETF 귀속 0% 가정", "etf_share": 0.0},
+      {"label": "ETF 귀속 50% 가정", "etf_share": 0.5},
+      {"label": "ETF 귀속 100% 가정", "etf_share": 1.0}
+    ]
+  },
+  {
+    "description": "가상 누적 수급. B와 e도 가정값. 실제 ETF 귀속률은 주어져 있지 않음.",
+    "event_id": "DEMO_2026-09-14",
+    "window_start": "2026-09-11T09:00:00+09:00",
+    "as_of": "2026-09-11T13:00:00+09:00",
+    "available_at": "2026-09-11T13:02:00+09:00",
+    "kind": "cumulative",
+    "rows": [
+      {"code": "DEMO_BUY_A", "net_buy_shares": 500000, "background_shares": 100000, "error_bound_shares": 50000},
+      {"code": "DEMO_BUY_B", "net_buy_shares": 170000, "background_shares": -30000, "error_bound_shares": 25000},
+      {"code": "DEMO_SELL_C", "net_buy_shares": -370000, "background_shares": -50000, "error_bound_shares": 40000},
+      {"code": "DEMO_SELL_D", "net_buy_shares": -140000, "background_shares": 20000, "error_bound_shares": 20000}
+    ],
+    "attribution_scenarios": [
+      {"label": "ETF 귀속 0% 가정", "etf_share": 0.0},
+      {"label": "ETF 귀속 50% 가정", "etf_share": 0.5},
+      {"label": "ETF 귀속 100% 가정", "etf_share": 1.0}
+    ]
+  }
+]

@@ -2,9 +2,10 @@
 """특정 종목군의 일별 시세를 지정 시작일부터 보강 수집 (다음 API, 400영업일 한도)
 사용: python fetch_daily_range.py --since 20260201 --wics 반도체와반도체장비 [--codes 000660,005930]
 """
-import argparse, sqlite3, sys
+import argparse, json, sqlite3, sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from fetch_market import DB, fetch_daily_daum
+from fetch_market import DB, fetch_daily_daum, store_daily_rows
+from market_dates import completed_session_date
 
 sys.stdout.reconfigure(encoding="utf-8")
 ap = argparse.ArgumentParser()
@@ -27,11 +28,24 @@ def work(c):
         return c, fetch_daily_daum(c, a.since)
     except Exception:
         return c, None
-n = 0
+n, failed = 0, []
+through = completed_session_date().strftime("%Y%m%d")
 with ThreadPoolExecutor(max_workers=6) as ex:
     for fut in as_completed([ex.submit(work, c) for c in codes]):
         c, rows = fut.result()
-        if rows:
-            con.executemany("INSERT OR REPLACE INTO daily VALUES(?,?,?,?,?,?)", rows); n += len(rows)
+        try:
+            saved = store_daily_rows(con, c, rows, a.since, through)
+        except (ValueError, TypeError):
+            saved = False
+        if saved:
+            n += len(rows)
+        else:
+            failed.append(c)
+con.execute("INSERT OR REPLACE INTO meta VALUES('range_collection',?)",
+            (json.dumps({"as_of": through, "status": "warning" if failed else "ok",
+                         "requested": len(codes), "failed_codes": failed}),))
 con.commit()
 print("rows upserted:", n, "| min date:", con.execute("SELECT min(date) FROM daily").fetchone()[0])
+con.close()
+if codes and len(failed) == len(codes):
+    raise SystemExit("보강 시세 수집 전체 실패; 기존 자료 보존")

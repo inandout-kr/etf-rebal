@@ -1,12 +1,64 @@
-# dist/ 를 gh-pages 브랜치에 단일 커밋으로 강제 푸시 (히스토리 누적 방지) — etf-finder 와 동일 방식
+﻿# Validate first, then append a commit to gh-pages in an isolated checkout.
+# The checkout is retained on success/failure for inspection or retry.
 $ErrorActionPreference = "Stop"
-Set-Location (Join-Path $PSScriptRoot "dist")
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+$OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = $OutputEncoding
+$deployCheckout = Join-Path ([System.IO.Path]::GetTempPath()) ("etf-rebal-deploy-" + [guid]::NewGuid().ToString("N"))
+$distPath = Join-Path $PSScriptRoot "dist"
 
-if (Test-Path .git) { Remove-Item -Recurse -Force .git -Confirm:$false }
-git init -b gh-pages -q
-git add -A
-git commit -q -m "deploy $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
-git push -f -q https://github.com/inandout-kr/etf-rebal.git gh-pages
-Remove-Item -Recurse -Force .git -Confirm:$false
+function Invoke-CheckedGit {
+  param([string[]]$Arguments)
+  $gitExitCode = $null
+  $previousPreference = $ErrorActionPreference
+  try {
+    $ErrorActionPreference = "Continue"
+    $global:LASTEXITCODE = $null
+    & git @Arguments
+    $gitExitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousPreference
+  }
+  if ($null -eq $gitExitCode -or $gitExitCode -ne 0) { throw "Git step failed ($gitExitCode): $($Arguments -join ' ')" }
+}
 
-Write-Host "gh-pages deploy done: https://inandout-kr.github.io/etf-rebal/"
+Push-Location $PSScriptRoot
+try {
+  try {
+    $ErrorActionPreference = "Continue"
+    $global:LASTEXITCODE = $null
+    & python validate_data.py --dist-dir $distPath
+    $validationExitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = "Stop"
+  }
+  if ($null -eq $validationExitCode -or $validationExitCode -ne 0) { throw "Deployment blocked by data quality validation" }
+  Invoke-CheckedGit -Arguments @("clone", "--quiet", "--depth", "1", "--single-branch", "--branch", "gh-pages", "https://github.com/inandout-kr/etf-rebal.git", $deployCheckout)
+  foreach ($file in @("index.html", "data.json", ".nojekyll")) {
+    Copy-Item -LiteralPath (Join-Path $distPath $file) -Destination (Join-Path $deployCheckout $file) -Force
+  }
+  Invoke-CheckedGit -Arguments @("-C", $deployCheckout, "add", "--", "index.html", "data.json", ".nojekyll")
+  try {
+    $ErrorActionPreference = "Continue"
+    $global:LASTEXITCODE = $null
+    & git -C $deployCheckout diff --cached --quiet
+    $diffExit = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = "Stop"
+  }
+  if ($diffExit -eq 1) {
+    Invoke-CheckedGit -Arguments @("-C", $deployCheckout, "commit", "--quiet", "-m", "deploy $(Get-Date -Format 'yyyy-MM-dd HH:mm')")
+    Invoke-CheckedGit -Arguments @("-C", $deployCheckout, "push", "--quiet", "origin", "HEAD:gh-pages")
+  } elseif ($diffExit -ne 0) {
+    throw "Could not inspect deployment changes ($diffExit)"
+  }
+  Write-Host "gh-pages deploy done: https://inandout-kr.github.io/etf-rebal/"
+  Write-Host "Deployment checkout retained: $deployCheckout"
+} catch {
+  Write-Error "Deployment failed. Checkout retained for retry: $deployCheckout`n$_" -ErrorAction Continue
+  exit 1
+} finally {
+  Pop-Location
+}
+exit 0

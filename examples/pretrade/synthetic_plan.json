@@ -1,0 +1,20 @@
+{
+  "description": "가상 예제. 실제 종목·수급·ETF 집행 자료가 아님. 매수 A의 기준 잔여 수요는 100억원.",
+  "event_id": "DEMO_2026-09-14",
+  "event_kind": "regular",
+  "window_start": "2026-09-11T09:00:00+09:00",
+  "available_at": "2026-09-11T08:50:00+09:00",
+  "target_known_at": "2026-09-11T08:50:00+09:00",
+  "trade_date": "2026-09-11",
+  "trade_end": "2026-09-11T15:20:00+09:00",
+  "scope": "remaining_at_window_start",
+  "assumption_no_reversal": true,
+  "assumption_no_overtrade": true,
+  "assumption_cash_completion_at_close": false,
+  "rows": [
+    {"code": "DEMO_BUY_A", "name": "가상 매수 A", "required_shares": 1000000, "reference_price": 10000},
+    {"code": "DEMO_BUY_B", "name": "가상 매수 B", "required_shares": 500000, "reference_price": 10000},
+    {"code": "DEMO_SELL_C", "name": "가상 매도 C", "required_shares": -800000, "reference_price": 10000},
+    {"code": "DEMO_SELL_D", "name": "가상 매도 D", "required_shares": -400000, "reference_price": 10000}
+  ]
+}

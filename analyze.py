@@ -15,7 +15,8 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from calendar_events import (REVIEW_WINDOWS, futures_last_trading_day, next_business_day, events_upcoming)
+from calendar_events import CALENDAR_YEARS, next_cycle, review_availability, review_windows, events_upcoming
+from market_dates import anchor_stocks, completed_session_date, current_universe, korea_now, latest_completed_date, usable_fx
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).parent
@@ -54,15 +55,20 @@ def load():
     return con, stocks, meta, holdings, etfs
 
 
-def period_stats(con, start, end):
+def period_stats(con, start, end, as_of=None):
     """심사대상기간 [start, end] 일평균 시가총액(종가×상장주식수)·일평균 거래대금"""
+    end = min(end, as_of or latest_completed_date(con))
     rows = con.execute(
-        """SELECT code, COUNT(*) n, AVG(close*shares) avg_mcap, AVG(trdval) avg_trdval, MAX(date) last, MIN(date) first
-           FROM daily WHERE date BETWEEN ? AND ? AND close IS NOT NULL AND shares IS NOT NULL GROUP BY code""",
+        """WITH sessions AS (SELECT date FROM daily GROUP BY date HAVING MAX(trdval)>0)
+           SELECT code, COUNT(*) n, AVG(close*shares) avg_mcap, AVG(trdval) avg_trdval, MAX(date) last, MIN(date) first
+           FROM daily WHERE date BETWEEN ? AND ? AND date IN (SELECT date FROM sessions)
+           AND close IS NOT NULL AND shares IS NOT NULL GROUP BY code""",
         (start, end)).fetchall()
     out = {r["code"]: {"n": r["n"], "avg_mcap": r["avg_mcap"], "avg_trdval": r["avg_trdval"], "last": r["last"], "first": r["first"]} for r in rows}
     ends = con.execute(
-        """SELECT d.code, d.date, d.close FROM daily d JOIN (SELECT code, MIN(date) mn, MAX(date) mx FROM daily WHERE date BETWEEN ? AND ? GROUP BY code) g
+        """WITH sessions AS (SELECT date FROM daily GROUP BY date HAVING MAX(trdval)>0)
+           SELECT d.code, d.date, d.close FROM daily d JOIN
+           (SELECT code, MIN(date) mn, MAX(date) mx FROM daily WHERE date BETWEEN ? AND ? AND date IN (SELECT date FROM sessions) GROUP BY code) g
            ON g.code=d.code AND (d.date=g.mn OR d.date=g.mx)""", (start, end)).fetchall()
     px = {}
     for r in ends:
@@ -94,8 +100,9 @@ def implied_float(holdings, stocks, keys=("kospi200", "kosdaq150", "msci_korea")
     return out
 
 
-def recent_avg_mcap(con, code, ndays):
-    rows = con.execute("SELECT close*shares FROM daily WHERE code=? ORDER BY date DESC LIMIT ?", (code, ndays)).fetchall()
+def recent_avg_mcap(con, code, ndays, as_of=None):
+    rows = con.execute("SELECT close*shares FROM daily WHERE code=? AND date<=? ORDER BY date DESC LIMIT ?",
+                       (code, as_of or latest_completed_date(con), ndays)).fetchall()
     vals = [r[0] for r in rows if r[0]]
     return (sum(vals) / len(vals)) if vals else None
 
@@ -136,6 +143,8 @@ def gics_sector(st, in_sector_etf, scheme="kospi200"):
 def eligible(st, ref_date, min_listing_months=6, is_cur=False):
     """심사대상 여부 (관리종목·유동비율 데이터 없음 → 미반영). 기존 구성종목(특례편입·분할 신설법인)은 상장기간 요건 예외"""
     nm = st["name"]
+    if st.get("review_ready") is False:
+        return False, "현재 유니버스 밖" if not st["universe_active"] else f"기준일 가격 없음 (마지막 {st.get('price_as_of') or '없음'})"
     if is_excluded_name(nm):
         return False, "리츠/스팩/인프라/선박"
     if st["code"][0] == "9":
@@ -217,10 +226,11 @@ def simulate(univ, current, N, cum_pct, liq_pct, keep_buf, new_buf, sector_min_s
     return selected, dropped_sectors
 
 
-def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map):
+def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, window=None):
     """KOSPI 200 / KOSDAQ 150 시뮬레이션"""
-    win = REVIEW_WINDOWS[key]
-    stats = period_stats(con, win["period_start"], min(win["period_end"], date.today().strftime("%Y%m%d")))
+    win = window or next_cycle(key)
+    as_of = as_of or latest_completed_date(con)
+    stats = period_stats(con, win["period_start"], win["period_end"], as_of)
     cur = {r["code"] for r in holdings[cfg["proxy"]]["rows"] if r.get("code")}
     curw = {r["code"]: r.get("weight") for r in holdings[cfg["proxy"]]["rows"] if r.get("code")}
     univ = []
@@ -244,7 +254,8 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map):
             continue
         univ.append({"code": code, "name": st["name"], "sector": sec, "sector_src": src, "avg_mcap": ps["avg_mcap"],
                      "avg_trdval": ps["avg_trdval"], "n_days": ps["n"], "is_cur": is_cur, "cur_weight": curw.get(code),
-                     "mktcap_now": st["mktcap"], "close": st["close"], "listing_date": st.get("listing_date"),
+                      "mktcap_now": st["mktcap"], "close": st["close"], "listing_date": st.get("listing_date"),
+                      "price_as_of": st.get("price_as_of"), "price_status": st.get("price_status"), "universe_as_of": st.get("universe_as_of"),
                      "fif": FIF.get(code), "ret_period": ps.get("ret_period"),
                      "risk": ("급등(부적합 판정 위험)" if (ps.get("ret_period") or 0) >= 1.5 else None)})
     selected, dropped = simulate(univ, cur, cfg["N"], cfg["cum"], cfg["liq"], cfg["keep_buf"], cfg["new_buf"],
@@ -254,7 +265,7 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map):
         u["mcap15"] = None
     top50 = sorted(univ, key=lambda u: -(u["mktcap_now"] or 0))[:50]
     for u in top50:
-        u["mcap15"] = recent_avg_mcap(con, u["code"], 15)
+        u["mcap15"] = recent_avg_mcap(con, u["code"], 15, as_of)
     adds = sorted([u for u in univ if u["code"] in selected and not u["is_cur"]], key=lambda u: -u["avg_mcap"])
     dels = sorted([u for u in univ if u["code"] not in selected and u["is_cur"]], key=lambda u: u["avg_mcap"])
     # 확신도: 임계값(버퍼·누적시총·유동성)까지의 여유. 경계(±1순위 이내)는 '低'
@@ -292,7 +303,7 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map):
         s["mcap"] += u["avg_mcap"]
     fields = ["code", "name", "sector", "sector_src", "avg_mcap", "avg_trdval", "n_days", "mcap_rank", "n_exist", "n_sector",
               "rank_ratio", "cum_share", "trd_rank", "liq_ok", "primary", "status", "mktcap_now", "close", "listing_date", "mcap15", "note",
-              "is_cur", "cur_weight", "fif", "confidence", "conf_note", "ret_period", "risk"]
+              "is_cur", "cur_weight", "fif", "confidence", "conf_note", "ret_period", "risk", "price_as_of", "price_status", "universe_as_of"]
 
     def pick(u):
         return {k: u.get(k) for k in fields}
@@ -349,13 +360,15 @@ def run_kospi100_50(k200_result, holdings):
 INTERMEDIATE_HOLDCO = {"402340": "000660"}   # SK스퀘어 → SK하이닉스 (공정위 중간지주회사; FnGuide TOP10 방법론: 자회사 동시 포함 시 중간지주 제외)
 
 
-def run_topn(con, stocks, holdings, key, name, N, universe_filter, window_start, window_end, note, fif=None, prefilter_top=None, holdco_rule=False):
+def run_topn(con, stocks, holdings, key, name, N, universe_filter, window_start, window_end, note, fif=None, prefilter_top=None, holdco_rule=False, as_of=None):
     """단순 시가총액(1개월 평균) 상위 N 선정형 지수 (FnGuide TOP10·반도체TOP10 등) 예측"""
-    stats = period_stats(con, window_start, min(window_end, date.today().strftime("%Y%m%d")))
+    as_of = as_of or latest_completed_date(con)
+    availability = review_availability({"period_start": window_start}, as_of)
+    stats = period_stats(con, window_start, window_end, as_of) if availability == "ready" else {}
     cur = {r["code"]: r for r in holdings[key]["rows"] if r.get("code")}
     cands = []
     for code, st in stocks.items():
-        if not st["is_common"] or code[0] == "9":
+        if st.get("review_ready") is False or not st["is_common"] or code[0] == "9":
             continue
         if is_excluded_name(st["name"]):
             continue
@@ -367,7 +380,8 @@ def run_topn(con, stocks, holdings, key, name, N, universe_filter, window_start,
         f = (fif or {}).get(code)
         cands.append({"code": code, "name": st["name"], "market": st["market"], "avg_mcap": ps["avg_mcap"], "n_days": ps["n"],
                       "mktcap_now": st["mktcap"], "is_cur": code in cur, "cur_weight": cur.get(code, {}).get("weight"),
-                      "wics_mid": st.get("wics_mid"), "fif": f, "avg_float_mcap": ps["avg_mcap"] * (f if f else 1.0)})
+                      "wics_mid": st.get("wics_mid"), "fif": f, "avg_float_mcap": ps["avg_mcap"] * (f if f else 1.0),
+                      "price_as_of": st.get("price_as_of"), "price_status": st.get("price_status"), "universe_as_of": st.get("universe_as_of")})
     if fif is not None:
         cands.sort(key=lambda u: -u["avg_mcap"])
         if prefilter_top:
@@ -391,7 +405,9 @@ def run_topn(con, stocks, holdings, key, name, N, universe_filter, window_start,
     missing = [{"code": c, "name": r["name"], "cur_weight": r.get("weight"), "note": "유니버스 필터 밖(업종분류 상이 가능)"} for c, r in cur.items() if c not in {u["code"] for u in cands}]
     return {"key": key, "name": name, "N": N, "proxy_etf": holdings[key]["etf_code"], "proxy_date": holdings[key]["date"],
             "window": {"start": window_start, "end": window_end}, "data_through": max((s["last"] for s in stats.values()), default=None),
-            "note": note, "top": cands[: N + 10], "adds": adds, "dels": dels, "cur_not_in_universe": missing,
+            "availability": availability,
+            "note": ("심사기간 시작 전 · 편출입 예측 대기. " if availability == "pending_review" else "") + note,
+            "top": cands[: N + 10], "adds": adds, "dels": dels, "cur_not_in_universe": missing if availability == "ready" else [],
             "current": [{"code": c, "name": r["name"], "weight": r.get("weight")} for c, r in cur.items()]}
 
 
@@ -421,12 +437,13 @@ def cap_monitor(holdings, etfs):
     return out
 
 
-def ipo_monitor(con, stocks):
+def ipo_monitor(con, stocks, as_of=None):
     """신규상장 특례편입 모니터: KOSPI 상위 50위(+유동시총 0.5×50위) / KOSDAQ 상위 30위 (상장 후 15매매일 평균시총)"""
-    today = date.today()
+    as_of = as_of or latest_completed_date(con)
+    today = korea_now().date()
     out = []
     for mkt, top in (("KOSPI", 50), ("KOSDAQ", 30)):
-        ranked = sorted([s for s in stocks.values() if s["market"] == mkt and s["is_common"] and s.get("mktcap")], key=lambda s: -s["mktcap"])
+        ranked = sorted([s for s in stocks.values() if s.get("review_ready") is not False and s["market"] == mkt and s["is_common"] and s.get("mktcap")], key=lambda s: -s["mktcap"])
         thr = ranked[top - 1]["mktcap"] if len(ranked) >= top else 0
         for s in ranked:
             ld = s.get("listing_date")
@@ -435,47 +452,75 @@ def ipo_monitor(con, stocks):
             d = datetime.strptime(ld, "%Y-%m-%d").date()
             if (today - d).days > 120:
                 continue
-            m15 = recent_avg_mcap(con, s["code"], 15)
-            ndays = con.execute("SELECT COUNT(*) FROM daily WHERE code=? AND date>=?", (s["code"], ld.replace("-", ""))).fetchone()[0]
+            m15 = recent_avg_mcap(con, s["code"], 15, as_of)
+            ndays = con.execute("SELECT COUNT(*) FROM daily WHERE code=? AND date BETWEEN ? AND ?", (s["code"], ld.replace("-", ""), as_of)).fetchone()[0]
             rank = ranked.index(s) + 1
             out.append({"code": s["code"], "name": s["name"], "market": mkt, "listing_date": ld, "days_listed": ndays,
+                        "price_as_of": s.get("price_as_of"), "price_status": s.get("price_status"), "universe_as_of": s.get("universe_as_of"),
                         "mktcap": s["mktcap"], "rank": rank, "threshold_rank": top, "threshold_mcap": thr, "mcap15": m15,
                         "eligible": rank <= top,
                         "note": ("15매매일 경과 후 최초 도래 KOSPI200 선물 최근월물 최종거래일(둘째 목) 익일 편입" if rank <= top else f"시총 {top}위 밖")})
     return sorted(out, key=lambda x: x["rank"])
 
 
-def msci_watch(stocks, holdings, usdkrw, fif=None):
+def msci_watch(stocks, holdings, usdkrw, fif=None, fx_quality=None, now=None):
     """MSCI Korea 표준지수 편입 후보 (참고용): 비구성 대형주. 기준: GIMI 2.3.2 EM Global Minimum Size Range 및 시장별 컷오프 (공식 컷오프는 리뷰 시점 산정)"""
     cur = {r["code"] for r in holdings["msci_korea"]["rows"] if r.get("code")}
+    if not usable_fx(usdkrw, fx_quality or {}, now):
+        return {"availability": "unavailable", "reason": "검증된 출처·관측시각의 환율이 없어 MSCI 계산을 보류합니다.",
+                "candidates": [], "smallest_current": [], "em_min_full_usd_bn": 3.94, "usdkrw": None,
+                "n_current": len(cur), "proxy_date": holdings["msci_korea"]["date"]}
     em_min_full = 3_940_000_000 * usdkrw     # USD 3.94bn (May 2026 GIMI, EM Standard 하한 0.5×)
     out = []
     for s in stocks.values():
-        if not s["is_common"] or s["code"] in cur or not s.get("mktcap"):
+        if s.get("review_ready") is False or not s["is_common"] or s["code"] in cur or not s.get("mktcap"):
             continue
         if is_excluded_name(s["name"]) or s["code"][0] == "9":
             continue
         if s["mktcap"] >= em_min_full * 0.8:
             f = (fif or {}).get(s["code"])
             out.append({"code": s["code"], "name": s["name"], "market": s["market"], "mktcap": s["mktcap"], "mktcap_usd_bn": s["mktcap"] / usdkrw / 1e9,
-                        "fif": f, "float_usd_bn": (s["mktcap"] * f / usdkrw / 1e9) if f else None,
+                         "fif": f, "float_usd_bn": (s["mktcap"] * f / usdkrw / 1e9) if f else None,
+                        "price_as_of": s.get("price_as_of"), "price_status": s.get("price_status"), "universe_as_of": s.get("universe_as_of"),
                         "listing_date": s.get("listing_date"), "note": "풀시총 ≥ EM 최소규모 0.8배. 유동시총(추정FIF)·외국인한도 요건은 별도"})
     out.sort(key=lambda x: -x["mktcap"])
     # 기존 구성종목 중 소형 (편출 후보 참고)
-    small = sorted([{"code": r["code"], "name": r["name"], "weight": r.get("weight"), "mktcap": stocks.get(r["code"], {}).get("mktcap")}
+    small = sorted([{"code": r["code"], "name": r["name"], "weight": r.get("weight"), "mktcap": stocks.get(r["code"], {}).get("mktcap"),
+                     "price_as_of": stocks[r["code"]].get("price_as_of"), "price_status": stocks[r["code"]].get("price_status")}
                     for r in holdings["msci_korea"]["rows"] if r.get("code") and stocks.get(r["code"])], key=lambda x: (x["mktcap"] or 0))[:12]
-    return {"candidates": out[:25], "smallest_current": small, "em_min_full_usd_bn": 3.94, "usdkrw": usdkrw,
+    return {"availability": "ready", "candidates": out[:25], "smallest_current": small, "em_min_full_usd_bn": 3.94, "usdkrw": usdkrw,
             "n_current": len(cur), "proxy_date": holdings["msci_korea"]["date"]}
 
 
-def fetch_usdkrw():
+def fetch_usdkrw(previous=None, now=None):
+    """관측 환율과 출처를 반환. 수집 실패 시 마지막 저장값과 원래 기준시각을 보존."""
+    previous = previous or {}
     try:
         import requests
         r = requests.get("https://m.stock.naver.com/api/marketindex/exchange/FX_USDKRW", headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        v = r.json().get("closePrice")
-        return float(str(v).replace(",", ""))
-    except Exception:
-        return 1380.0
+        r.raise_for_status()
+        payload = r.json()
+        value = float(str(payload.get("closePrice")).replace(",", ""))
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("환율이 유효한 양수가 아닙니다")
+        quality = {"status": "ok", "as_of": payload.get("localTradedAt") or payload.get("tradeDateTime"),
+                   "source": "Naver FX_USDKRW", "fetched_at": korea_now(now).isoformat(timespec="seconds")}
+        if not usable_fx(value, quality, now):
+            raise ValueError("환율 관측시각을 검증할 수 없습니다")
+        return value, quality
+    except (ImportError, ValueError, TypeError, KeyError, OSError) as exc:
+        error = type(exc).__name__
+    except Exception as exc:
+        # requests 예외도 기록하되 인증정보 등이 섞인 전체 응답은 저장하지 않는다.
+        error = type(exc).__name__
+    value = previous.get("usdkrw")
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value <= 0:
+        return None, {"status": "unavailable", "as_of": None, "source": None, "fetched_at": None, "error": error}
+    old_fx = previous.get("data_quality", {}).get("fx", {})
+    verified = usable_fx(value, old_fx, now)
+    return value, {"status": "fallback" if verified else "unverified_fallback", "as_of": old_fx.get("as_of"),
+                   "source": old_fx.get("source") or "legacy analysis (unverified)",
+                   "fetched_at": old_fx.get("fetched_at"), "error": error}
 
 
 def tracking_aum(etfs, keys):
@@ -493,12 +538,22 @@ def tracking_aum(etfs, keys):
 
 def main():
     con, stocks, meta, holdings, etfs = load()
+    now = korea_now()
+    today = now.date()
+    as_of = latest_completed_date(con, now)
+    universe_codes, universe_quality = current_universe(con, stocks, meta)
+    if universe_quality["status"] == "unavailable":
+        raise ValueError("현재 유니버스 기록을 확인할 수 없습니다. 이전 분석을 보존하고 검증된 수집을 기다립니다.")
+    stocks = anchor_stocks(con, stocks, as_of, current=True, metadata=meta)
+    windows = review_windows(today)
+    previous_path = DATA / "analysis.json"
+    previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path.exists() else {}
     sector_etf_map = {}
     for k in K200_SECTOR_ETF:
         for r in holdings.get(k, {}).get("rows", []):
             if r.get("code"):
                 sector_etf_map[r["code"]] = k
-    usdkrw = fetch_usdkrw()
+    usdkrw, fx_quality = fetch_usdkrw(previous, now)
     fif = implied_float(holdings, stocks)
     FIF.update(fif)
 
@@ -507,33 +562,64 @@ def main():
     cfg_kq150 = dict(name="KOSDAQ 150", proxy="kosdaq150", market="KOSDAQ", N=150, cum=0.60, liq=0.80, keep_buf=1.20, new_buf=0.80,
                      sector_min_share=0.01,
                      rules="산업군(GICS 참고 11개, 시총 1% 미만 산업군 제외)별 누적 60% & 거래대금 순위 80% 이내 → 기존 120%/신규 80% 버퍼 → 150종목 조정 (소형주 300위 초과 제외 가능)")
-    k200 = run_krx_index(con, stocks, holdings, "kospi200", cfg_k200, sector_etf_map)
-    kq150 = run_krx_index(con, stocks, holdings, "kosdaq150", cfg_kq150, {})
+    k200 = run_krx_index(con, stocks, holdings, "kospi200", cfg_k200, sector_etf_map, as_of, windows["kospi200"])
+    kq150 = run_krx_index(con, stocks, holdings, "kosdaq150", cfg_kq150, {}, as_of, windows["kosdaq150"])
     k100 = run_kospi100_50(k200, holdings)
 
-    # FnGuide TOP10: 유가+코스닥 유동시총 상위 100 중 유동시총 상위 10 (선정 8월말 → 9월 만기 D+2 적용). 유동시총 데이터 없음 → 시총 근사
+    top_cycle = next_cycle("fn_top10", today)
+    semi_cycle = next_cycle("fn_semitop10", today)
+    # FnGuide TOP10: 최근 20영업일 평균, 반도체 TOP10: 선정 전월 평균.
     top10 = run_topn(con, stocks, holdings, "fn_top10", "FnGuide TOP10 (TIGER 코리아TOP10)", 10,
-                     lambda st: True, "20260803", "20260831",
-                     "선정기준일 8/31 확정 → 9/14 적용. 유동시가총액 상위 10 (유동비율은 KODEX200·MSCI ETF 비중에서 역산한 추정치, 8월 단순시총 평균 × 추정FIF)",
-                     fif=fif, prefilter_top=100, holdco_rule=True)
+                     lambda st: True, top_cycle["period_start"], top_cycle["period_end"],
+                     f"선정기준일 {top_cycle['ref_date']} → {top_cycle['apply']} 적용(일정 규칙 기반). 최근 20영업일 평균시총 × 추정FIF (ETF 비중 역산, 공식 선정 결과 아님)",
+                     fif=fif, prefilter_top=100, holdco_rule=True, as_of=as_of)
     semi10 = run_topn(con, stocks, holdings, "fn_semitop10", "FnGuide 반도체 TOP10 (TIGER 반도체TOP10)", 10,
-                      lambda st: (st.get("wics_mid") or "") == "반도체와반도체장비", "20260901", "20260930",
-                      "선정 9/30(1개월 단순시총 평균) → 10월 만기 익주 첫 영업일 적용. 유니버스: FICS 반도체 ≈ WICS 반도체와반도체장비 근사")
+                      lambda st: (st.get("wics_mid") or "") == "반도체와반도체장비", semi_cycle["period_start"], semi_cycle["period_end"],
+                      f"선정 {semi_cycle['ref_date']}(1개월 평균) → {semi_cycle['apply']} 적용(일정 규칙 기반). FICS 반도체 ≈ WICS 반도체와반도체장비 근사", as_of=as_of)
+    top10["window"].update(top_cycle)
+    semi10["window"].update(semi_cycle)
     # 추종 AUM
     aum_k200, lst_k200 = tracking_aum(etfs, ["코스피 200", "KOSPI 200"])
     aum_kq150, lst_kq150 = tracking_aum(etfs, ["코스닥 150"])
 
+    warnings = []
+    departed = [c for c, s in stocks.items() if s["is_common"] and c not in universe_codes]
+    missing = [c for c in universe_codes if stocks[c]["is_common"] and not stocks[c]["review_ready"]]
+    if departed:
+        warnings.append(f"현재 유니버스 밖 {len(departed)}종목은 심사에서 제외하고 과거 기록을 보존했습니다.")
+    if missing:
+        warnings.append(f"현재 유니버스 기준일 가격 누락 {len(missing)}종목: {', '.join(sorted(missing))}; 심사 제외·보유 시 수급 보류")
+    raw_latest = con.execute("SELECT MAX(date) FROM daily").fetchone()[0]
+    if raw_latest and raw_latest > as_of:
+        warnings.append(f"미완료 또는 전 시장 거래대금 0인 시세를 제외하고 {as_of} 완료 시세로 계산했습니다.")
+    if as_of < completed_session_date(now).strftime("%Y%m%d"):
+        warnings.append(f"최근 완료 거래일 시세가 없어 {as_of} 데이터를 사용합니다.")
+    if fx_quality["status"] != "ok":
+        warnings.append("환율 수집 실패: 검증된 이전 환율과 원래 관측시각을 사용합니다." if fx_quality["status"] == "fallback"
+                        else "환율 출처·관측시각을 검증할 수 없어 MSCI 계산을 보류합니다.")
+    for item in (top10, semi10):
+        if item["availability"] == "pending_review":
+            warnings.append(f"{item['name']}: 다음 심사기간 시작 전이므로 편출입 예측을 대기합니다.")
+    if today.year not in CALENDAR_YEARS or any(w["calendar_coverage"] == "partial" for w in (windows["kospi200"], top_cycle, semi_cycle)) or (today + timedelta(days=300)).year not in CALENDAR_YEARS:
+        warnings.append("일부 일정은 등록 휴장일 범위(2026~2027)를 벗어납니다. 공식 거래소 일정 확인이 필요합니다.")
     result = {
-        "generated": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "market_updated": meta.get("updated"), "last_daily": meta.get("last_daily"), "usdkrw": usdkrw,
+        "generated": now.strftime("%Y-%m-%d %H:%M"),
+        "market_updated": meta.get("updated"), "last_daily": as_of, "usdkrw": usdkrw,
+        "data_quality": {"status": "warning" if warnings else "ok", "warnings": warnings,
+                         "as_of": datetime.strptime(as_of, "%Y%m%d").date().isoformat(), "fx": fx_quality,
+                         "universe": {k: v for k, v in universe_quality.items() if k != "codes"}
+                                     | {"scope": "current_snapshot", "price_as_of": as_of}},
+        "stock_data": {c: {"name": s["name"], "price_as_of": s["price_as_of"], "price_status": s["price_status"],
+                           "universe_active": s["universe_active"], "universe_as_of": s["universe_as_of"], "review_ready": s["review_ready"]}
+                       for c, s in stocks.items() if s["is_common"]},
         "kospi200": k200, "kosdaq150": kq150, "kospi100": k100.get("kospi100"),
         "fn_top10": top10, "fn_semitop10": semi10,
         "cap_monitor": cap_monitor(holdings, etfs),
-        "ipo_monitor": ipo_monitor(con, stocks),
-        "msci": msci_watch(stocks, holdings, usdkrw, fif),
+        "ipo_monitor": ipo_monitor(con, stocks, as_of),
+        "msci": msci_watch(stocks, holdings, usdkrw, fif, fx_quality, now),
         "tracking_aum": {"kospi200": {"total_eok": aum_k200, "etfs": sorted(lst_k200, key=lambda x: -x["aum_eok"])},
                          "kosdaq150": {"total_eok": aum_kq150, "etfs": sorted(lst_kq150, key=lambda x: -x["aum_eok"])}},
-        "events": events_upcoming(date.today(), 300),
+        "events": events_upcoming(today, 300),
         "fif": {k: round(v, 3) for k, v in fif.items()},
     }
     (DATA / "analysis.json").write_text(json.dumps(result, ensure_ascii=False, indent=1, default=str), encoding="utf-8")

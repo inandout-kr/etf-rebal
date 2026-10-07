@@ -1,0 +1,16 @@
+{
+  "description": "가상 PDF. CU·발행좌수·목록 완전성·기업행동 확인은 예제에서만 주어진 가정.",
+  "etf_code": "DEMO_ETF",
+  "as_of": "2026-09-08T15:30:00+09:00",
+  "available_at": "2026-09-09T08:10:00+09:00",
+  "kind": "pdf",
+  "cu_units": 10000,
+  "etf_units": 1000000,
+  "complete": true,
+  "corporate_actions_verified": true,
+  "rows": [
+    {"code": "DEMO_BUY_A", "count": 1000},
+    {"code": "DEMO_SELL_C", "count": 2000},
+    {"code": "DEMO_UNCHANGED", "count": 500}
+  ]
+}

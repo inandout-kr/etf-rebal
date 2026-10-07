@@ -15,12 +15,14 @@
 출력: data/flows.json
 """
 import json
+import math
 import sqlite3
 import sys
 from datetime import date
 from pathlib import Path
 
-from calendar_events import prev_business_day
+from calendar_events import next_cycle
+from market_dates import anchor_stocks, completed_adv, korea_now, latest_completed_date, MARKET_CLOSE, require_current_prices
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).parent
@@ -29,88 +31,103 @@ DATA = ROOT / "data"
 K200_ETFS = [("069500", 1.0), ("102110", 1.0), ("148020", 1.0), ("105190", 1.0), ("152100", 1.0), ("069660", 1.0), ("494890", 1.0), ("441800", 1.0),
              ("278530", 1.0), ("294400", 1.0), ("498400", 1.0), ("472150", 1.0), ("475720", 1.0), ("122630", 2.0)]
 CONFIGS = [
-    dict(key="fn_top10", name="FnGuide TOP10", apply="2026-09-14", fix="9/10 만기일 종가로 비중 확정", proxy="fn_top10", etfs=[("292150", 1.0)],
+    dict(key="fn_top10", name="FnGuide TOP10", proxy="fn_top10", etfs=[("292150", 1.0)],
          target=("analysis_topn", "fn_top10"), weighting=dict(type="float", cap=0.25),
-         note="선정(8/31 기준 20영업일 유동시총 평균 상위10) 확정 · 유동비율은 ETF 비중 역산 추정"),
-    dict(key="fn_battery", name="FnGuide 2차전지 산업", apply="2026-09-14~16 (3영업일 분할)", fix="9/10(개편 마지막날 T-4) 종가", proxy="fn_battery", etfs=[("305720", 1.0)],
+         note="선정기준일 최근 20영업일 유동시총 평균 상위10 예측 · 유동비율은 ETF 비중 역산 추정"),
+    dict(key="fn_battery", name="FnGuide 2차전지 산업", proxy="fn_battery", etfs=[("305720", 1.0)],
          target="current", weighting=dict(type="score_tiered", first=0.20, others=0.15),
-         note="스코어(Z-score) 가중은 재현 불가 → 현재 비중을 스코어 대리로 두고 1위 20%/그외 15% 실링만 재적용. 종목 변경(8/31 선정) 미반영"),
-    dict(key="fn_aitop3", name="FnGuide AI 반도체 TOP3+", apply="2026-09-14", fix="9/10 만기일 종가", proxy="fn_aitop3", etfs=[("469150", 1.0)],
+         note="스코어(Z-score) 가중은 재현 불가 → 현재 비중을 스코어 대리로 두고 1위 20%/그외 15% 실링만 재적용. 종목 변경(전월 말 선정) 미반영"),
+    dict(key="fn_aitop3", name="FnGuide AI 반도체 TOP3+", proxy="fn_aitop3", etfs=[("469150", 1.0)],
          target="current", weighting=dict(type="topn_fixed", n=3, w=0.25, rest="equal", pick="weight"),
          note="TOP3(재무스코어 상위, 현행 TOP3 유지 가정) 각 25% 고정 + 나머지 17종목 균등(1.47%). 종목 변경 미반영"),
-    dict(key="fn_semitop10", name="FnGuide 반도체 TOP10", apply="2026-10-12", fix="10/8(T-2) 종가", proxy="fn_semitop10", etfs=[("396500", 1.0), ("488080", 2.0)],
+    dict(key="fn_semitop10", name="FnGuide 반도체 TOP10", proxy="fn_semitop10", etfs=[("396500", 1.0), ("488080", 2.0)],
          target=("analysis_topn", "fn_semitop10"), weighting=dict(type="topn_fixed", n=2, w=0.25, rest="float", pick="mcap"),
-         note="선정 9/30(1개월 단순시총 평균 상위10, 예측) · 상위2 각 25% 고정 + 하위8 유동시총 가중 50%"),
-    dict(key="fn_aitop2", name="FnGuide AI반도체 TOP2+ (KODEX)", apply="2026-10-13", fix="10/8 만기일 종가", proxy="fn_aitop2", etfs=[("395160", 1.0)],
+         note="선정 전월 말(1개월 단순시총 평균 상위10, 예측) · 상위2 각 25% 고정 + 하위8 유동시총 가중 50%"),
+    dict(key="fn_aitop2", name="FnGuide AI반도체 TOP2+ (KODEX)", proxy="fn_aitop2", etfs=[("395160", 1.0)],
          target="current", weighting=dict(type="topn_fixed", n=2, w=0.25, rest="float", cap=0.15, pick="mcap"),
          note="ML 키워드 선정은 재현 불가 → 종목 변경 미반영. 시총 상위2 각 25% 고정, 그외 유동시총 가중·15% 실링(투자설명서)"),
-    dict(key="fn_aitop2_sol", name="FnGuide AI반도체 TOP2 플러스 (SOL)", apply="2026-10-13", fix="10/8 만기일 종가", proxy="fn_aitop2_sol", etfs=[("0167A0", 1.0)],
+    dict(key="fn_aitop2_sol", name="FnGuide AI반도체 TOP2 플러스 (SOL)", proxy="fn_aitop2_sol", etfs=[("0167A0", 1.0)],
          target="current", weighting=dict(type="topn_fixed", n=2, w=0.25, rest="float", cap=0.15, pick="mcap"),
          note="SOL 상품 기초지수(PR)는 구성종목 수가 달라 별도 계산. 종목 변경 미반영, TOP2 25%·그외 15% 실링"),
-    dict(key="wise_battery", name="WISE 2차전지 테마", apply="2026-10-12", fix="10/8 만기일 종가(익일 적용)", proxy="wise_battery", etfs=[("305540", 1.0)],
+    dict(key="wise_battery", name="WISE 2차전지 테마", proxy="wise_battery", etfs=[("305540", 1.0)],
          target="current", weighting=dict(type="float", cap=0.15), note="종목 변경 미반영, 15% 실링 재적용"),
-    dict(key="fn_ship", name="FnGuide 조선 TOP3 플러스", apply="2026-11-16", fix="11/11(D-1) 종가", proxy="fn_ship", etfs=[("466920", 1.0)],
+    dict(key="fn_ship", name="FnGuide 조선 TOP3 플러스", proxy="fn_ship", etfs=[("466920", 1.0)],
          target="current", weighting=dict(type="topn_fixed", n=3, w=0.25, rest="float", cap=0.20, pick="weight"),
-         note="조선 TOP3(현행) 각 25% 고정 + 플러스 유니버스 유동시총 가중·20% 실링. 종목 변경(10/30 선정) 미반영"),
-    dict(key="mkf_samsung", name="MKF 삼성그룹", apply="2026-12-02~08 (5영업일 분할)", fix="11월 말 리뷰", proxy="mkf_samsung", etfs=[("102780", 1.0)],
+         note="조선 TOP3(현행) 각 25% 고정 + 플러스 유니버스 유동시총 가중·20% 실링. 종목 변경(전월 말 선정) 미반영"),
+    dict(key="mkf_samsung", name="MKF 삼성그룹", proxy="mkf_samsung", etfs=[("102780", 1.0)],
          target="current", weighting=dict(type="float", cap=0.25), note="유동시총 가중 25% 실링(삼성전자) 재적용"),
-    dict(key="kospi200", name="KOSPI 200", apply="2026-12-11", fix="12/10 종가", proxy="kospi200", etfs=K200_ETFS,
+    dict(key="kospi200", name="KOSPI 200", proxy="kospi200", etfs=K200_ETFS,
          target=("analysis_krx", "kospi200"), weighting=dict(type="float", cap=None),
          note="추종 ETF(코스피200·TR·커버드콜·레버리지 2배) 합계 기준. 연기금·인덱스펀드 제외 → 실제 추종자금은 훨씬 큼. 유지 종목의 Δ는 유동비율 추정오차 포함"),
-    dict(key="kosdaq150", name="KOSDAQ 150", apply="2026-12-11", fix="12/10 종가", proxy="kosdaq150", etfs=[("229200", 1.0), ("232080", 1.0), ("233740", 2.0)],
+    dict(key="kosdaq150", name="KOSDAQ 150", proxy="kosdaq150", etfs=[("229200", 1.0), ("232080", 1.0), ("233740", 2.0)],
          target=("analysis_krx", "kosdaq150"), weighting=dict(type="float", cap=None), note="추종 ETF 합계(레버리지 2배) 기준"),
-    dict(key="kospi100", name="KOSPI 100", apply="2026-12-11", fix="12/10 종가", proxy="kospi100", etfs=[("237350", 1.0)],
+    dict(key="kospi100", name="KOSPI 100", proxy="kospi100", etfs=[("237350", 1.0)],
          target=("analysis_k100",), weighting=dict(type="float", cap=0.30), note="KOSPI200 심사 선정종목 중 상위100(버퍼 120/80%), 30% CAP"),
-    dict(key="kospi200_it", name="코스피 200 정보기술", apply="2026-12-11", fix="12/10 종가", proxy="kospi200_it", etfs=[("139260", 1.0), ("243880", 2.0)],
-         target=("k200_sector", "정보기술"), weighting=dict(type="float", cap=0.20), note="KOSPI200 12월 선정종목 중 GICS 정보기술 전부, 20% CAP 재설정"),
-    dict(key="fn_ksemi", name="FnGuide K-반도체", apply="2026-12-16~17 (D+4·D+5)", fix="12/14(D+2) 종가", proxy="fn_ksemi", etfs=[("395270", 1.0)],
-         target="current", weighting=dict(type="float", cap=0.25), note="종목 변경(11/30 선정) 미반영, 25% 실링 재적용"),
-    dict(key="fn_defense", name="FnGuide K-방위산업", apply="2026-12-14", fix="12/10 만기일 종가", proxy="fn_defense", etfs=[("449450", 1.0)],
+    dict(key="kospi200_it", name="코스피 200 정보기술", proxy="kospi200_it", etfs=[("139260", 1.0), ("243880", 2.0)],
+         target=("k200_sector", "정보기술"), weighting=dict(type="float", cap=0.20), note="KOSPI200 해당 회차 선정종목 중 GICS 정보기술 전부, 20% CAP 재설정"),
+    dict(key="fn_ksemi", name="FnGuide K-반도체", proxy="fn_ksemi", etfs=[("395270", 1.0)],
+         target="current", weighting=dict(type="float", cap=0.25), note="종목 변경(전월 말 선정) 미반영, 25% 실링 재적용"),
+    dict(key="fn_defense", name="FnGuide K-방위산업", proxy="fn_defense", etfs=[("449450", 1.0)],
          target="current", weighting=dict(type="float", cap=0.20), note="종목 변경 미반영, 20% 실링 재적용"),
-    dict(key="fn_sobujang", name="FnGuide AI 반도체 소부장", apply="2026-12-14", fix="12/9(D-1) 종가", proxy="fn_sobujang", etfs=[("455850", 1.0)],
+    dict(key="fn_sobujang", name="FnGuide AI 반도체 소부장", proxy="fn_sobujang", etfs=[("455850", 1.0)],
          target="current", weighting=dict(type="float", cap=0.20), note="종목 변경 미반영, 20% 실링 재적용"),
-    dict(key="is_power", name="iSelect AI 전력핵심설비", apply="2026-12-14", fix="만기일 익주 첫 영업일", proxy="is_power", etfs=[("487240", 1.0)],
+    dict(key="is_power", name="iSelect AI 전력핵심설비", proxy="is_power", etfs=[("487240", 1.0)],
          target="current", weighting=dict(type="float", cap=0.20), note="종목 변경 미반영, 20% 캡 재적용(투자설명서 기준)"),
-    dict(key="kedi_power", name="KEDI 코리아AI전력기기TOP3+", apply="2026-12-15", fix="12/10 만기일 기준", proxy="kedi_power", etfs=[("0117V0", 1.0)],
+    dict(key="kedi_power", name="KEDI 코리아AI전력기기TOP3+", proxy="kedi_power", etfs=[("0117V0", 1.0)],
          target="current", weighting=dict(type="topn_fixed", n=3, w=0.25, rest="current", pick="weight"), note="TOP3 각 25% 고정, 나머지 7종목 점수가중(현재비중 대리)"),
-    dict(key="fn_top5plus", name="FnGuide TOP 5 Plus", apply="2026-12-14 (연2회 시)", fix="T-2 종가", proxy="fn_top5plus", etfs=[("315930", 1.0)],
+    dict(key="fn_top5plus", name="FnGuide TOP 5 Plus", proxy="fn_top5plus", etfs=[("315930", 1.0)],
          target="current", weighting=dict(type="float", cap=0.25), note="12월 정기변경 실시 여부 자료 상충(방법론상 연1회 6월). 참고용"),
 ]
 
 
-def water_fill(weights, cap):
-    tot = sum(weights.values())
-    w = {k: v / tot for k, v in weights.items()}
-    if not cap:
-        return w, set()
+def build_configs(today=None):
+    out = []
+    for cfg in CONFIGS:
+        cycle = next_cycle(cfg["key"], today)
+        apply = cycle["apply"]
+        if cycle["apply_end"] != apply:
+            apply += f"~{cycle['apply_end']} (분할 적용)"
+        out.append(dict(cfg, apply=apply, fix=f"{cycle['fix_date']} 종가 기준(일정 규칙)", cycle=cycle))
+    return out
+
+
+def event_has_passed(cycle, now=None):
+    now = korea_now(now)
+    end = cycle["trade_end"]
+    return end < now.date().isoformat() or (end == now.date().isoformat() and now.time() >= MARKET_CLOSE)
+
+
+def _capped_weights(weights, caps):
+    if not weights or any(not math.isfinite(v) or v <= 0 for v in weights.values()):
+        raise ValueError("가중치 계산에는 유효한 양수 시가총액이 필요합니다.")
+    if any(not math.isfinite(v) or v <= 0 for v in caps.values()) or sum(caps.values()) < 1 - 1e-12:
+        raise ValueError("구성종목 수와 비중 상한으로 100%를 배분할 수 없습니다.")
+    total = sum(weights.values())
+    w = {k: v / total for k, v in weights.items()}
     capped = set()
-    for _ in range(80):
-        over = [k for k, v in w.items() if v > cap + 1e-12 and k not in capped]
+    for _ in range(len(w) + 1):
+        over = {k for k in w if k not in capped and w[k] > caps[k] + 1e-12}
         if not over:
-            break
-        capped |= set(over)
-        free = 1 - cap * len(capped)
-        rest = {k: v for k, v in w.items() if k not in capped}
-        s = sum(rest.values())
-        w = {k: (cap if k in capped else v / s * free) for k, v in w.items()}
-    return w, capped
+            return w, capped
+        capped |= over
+        free = 1 - sum(caps[k] for k in capped)
+        rest = sum(weights[k] for k in w if k not in capped)
+        if not rest:
+            raise ValueError("비중 상한 적용 후 잔여 비중을 배분할 종목이 없습니다.")
+        w = {k: caps[k] if k in capped else weights[k] / rest * free for k in w}
+    raise ValueError("비중 상한 계산이 수렴하지 않았습니다.")
+
+
+def water_fill(weights, cap):
+    return _capped_weights(weights, {k: cap if cap is not None else 1.0 for k in weights})
 
 
 def tiered_ceiling(weights, first, others):
     """가장 큰 종목 first, 나머지 others 실링 (초과분 비례 재배분 반복)"""
-    tot = sum(weights.values())
-    w = {k: v / tot for k, v in weights.items()}
-    for _ in range(80):
-        top = max(w, key=w.get)
-        caps = {k: (first if k == top else others) for k in w}
-        over = {k for k, v in w.items() if v > caps[k] + 1e-12}
-        if not over:
-            break
-        fixed = sum(caps[k] for k in over)
-        rest = {k: v for k, v in w.items() if k not in over}
-        s = sum(rest.values())
-        w = {k: (caps[k] if k in over else v / s * (1 - fixed)) for k, v in w.items()}
-    return w
+    if not weights:
+        raise ValueError("가중치를 계산할 구성종목이 없습니다.")
+    top = max(weights, key=weights.get)
+    return _capped_weights(weights, {k: first if k == top else others for k in weights})[0]
 
 
 def main():
@@ -121,9 +138,14 @@ def main():
     by_etf = {v["etf_code"]: v for v in holdings.values()}
     etf_master = {e["code"]: e for e in json.loads((DATA / "etf_master.json").read_text(encoding="utf-8"))}
     A = json.loads((DATA / "analysis.json").read_text(encoding="utf-8"))
+    now = korea_now()
+    today = now.date().isoformat()
+    as_of = latest_completed_date(con, now)
+    if A.get("last_daily") != as_of:
+        raise ValueError("분석과 수급 계산의 시세 기준일이 다릅니다. analyze.py를 먼저 실행하세요.")
+    stocks = anchor_stocks(con, stocks, as_of, current=True)
     fif_global = A.get("fif", {})
-    adv = {r[0]: r[1] for r in con.execute(
-        "SELECT code, AVG(trdval) FROM (SELECT code, trdval, ROW_NUMBER() OVER (PARTITION BY code ORDER BY date DESC) rn FROM daily) WHERE rn<=20 GROUP BY code")}
+    adv = completed_adv(con, as_of)
     px_cache = {}
 
     def px_at(dt):
@@ -151,12 +173,14 @@ def main():
             return list(cur), "구성종목 변경 없음 가정"
         if t[0] == "analysis_topn":
             r = A[t[1]]
+            if r.get("availability") == "pending_review":
+                return list(cur), "심사기간 시작 전: 구성 유지 가정의 비중 조정만 계산 (편출입 예측 없음)"
             top = [u for u in r["top"] if not u.get("excluded")][: r["N"]]
             return [u["code"] for u in top], f"analyze.py 예측 (편입 {[u['name'] for u in r['adds']]} / 편출 {[u['name'] for u in r['dels']]})"
         if t[0] == "analysis_krx":
             r = A[t[1]]
             sel = [u["code"] for u in r["all"] if u.get("status") and (u["status"].startswith("유지") or u["status"].startswith("신규편입"))]
-            return sel, f"analyze.py 12월 시뮬레이션 (편입 {len(r['adds'])} / 편출 {len(r['dels'])})"
+            return sel, f"해당 회차 규칙 기반 시뮬레이션 (편입 {len(r['adds'])} / 편출 {len(r['dels'])})"
         if t[0] == "analysis_k100":
             r = A["kospi100"]
             dels = {u["code"] for u in r["dels"]}
@@ -166,19 +190,22 @@ def main():
             r = A["kospi200"]
             sel = [u["code"] for u in r["all"] if u.get("status") and (u["status"].startswith("유지") or u["status"].startswith("신규편입")) and u.get("sector") == t[1]]
             # 현행 섹터ETF 구성종목 중 시뮬레이션에서 유지된 것 + 신규편입 중 해당 산업군
-            return sel, f"KOSPI200 12월 시뮬레이션 선정종목 중 {t[1]} 산업군 ({len(sel)}종목)"
+            return sel, f"KOSPI200 해당 회차 시뮬레이션 선정종목 중 {t[1]} 산업군 ({len(sel)}종목)"
         return list(cur), "?"
 
-    out = {"generated": A["generated"], "events": [], "by_stock": {}}
-    today = date.today().isoformat()
-    for cfg in CONFIGS:
+    out = {"generated": A["generated"], "data_through": as_of, "data_quality": A.get("data_quality"), "events": [], "by_stock": {}}
+    for cfg in build_configs(now.date()):
         h = holdings.get(cfg["proxy"])
         if not h:
             print("skip (no proxy):", cfg["key"])
             continue
+        relevant_holdings = [h] + [by_etf[c] for c, _ in cfg["etfs"] if c in by_etf]
+        require_current_prices(stocks, {r["code"] for entry in relevant_holdings for r in entry["rows"]
+                                       if r.get("code") and r.get("weight") is not None}, cfg["name"])
         cur_w = adjusted_weights(h)
         cur = set(cur_w)
         tgt, tgt_src = target_codes(cfg, cur)
+        require_current_prices(stocks, tgt, cfg["name"])
         tgt = [c for c in tgt if c in stocks and stocks[c].get("mktcap")]
         wt = cfg["weighting"]
         cap = wt.get("cap")
@@ -218,6 +245,8 @@ def main():
             fixed = set(top)
             rest = [c for c in tgt if c not in fixed]
             free = 1 - wt["w"] * len(top)
+            if free < 0 or (free > 1e-12 and not rest):
+                raise ValueError(f"{cfg['name']}: 고정 비중 적용 후 잔여 종목이 부족합니다.")
             if wt["rest"] == "equal":
                 rw = {c: free / len(rest) for c in rest}
             elif wt["rest"] == "current":
@@ -262,15 +291,20 @@ def main():
                          "delta": round(w_t.get(c, 0) * 100 - cur_w.get(c, 0), 3), "fixed": c in fixed, "capped": c in capped,
                          "flow_by_etf": {k: round(v, 1) for k, v in f.items()}, "flow_total": round(tot, 1),
                          "adv20": adv.get(c), "adv_mult": (abs(tot) * 1e8 / adv[c]) if adv.get(c) else None,
-                         "fif": round(fifs[c][0], 3), "fif_src": fifs[c][1], "mktcap_now": stocks[c]["mktcap"]})
+                         "fif": round(fifs[c][0], 3), "fif_src": fifs[c][1], "mktcap_now": stocks[c]["mktcap"],
+                         "price_as_of": stocks[c].get("price_as_of"), "price_status": stocks[c].get("price_status"),
+                         "universe_as_of": stocks[c].get("universe_as_of")})
         rows.sort(key=lambda r: -abs(r["flow_total"]))
         ev = {"key": cfg["key"], "name": cfg["name"], "apply": cfg["apply"], "fix": cfg.get("fix"), "proxy_etf": h["etf_code"], "pdf_date": h["date"],
+              "window": cfg["cycle"], "date_status": cfg["cycle"]["date_status"], "apply_end": cfg["cycle"]["apply_end"],
+              "availability": "pending_review" if "심사기간 시작 전" in tgt_src else "ready",
               "target_src": tgt_src, "weighting": wt, "note": cfg.get("note"), "etfs": etfs_meta, "notional_total": round(sum(e["notional_eok"] for e in etfs_meta)),
               "n_current": len(cur), "n_target": len(tgt), "adds": [r["name"] for r in rows if r["status"] == "신규편입"], "dels": [r["name"] for r in rows if r["status"] == "편출"],
               "total_buy": round(sum(r["flow_total"] for r in rows if r["flow_total"] > 0), 1), "total_sell": round(sum(r["flow_total"] for r in rows if r["flow_total"] < 0), 1),
               "rows": rows}
-        ev["trade_date"] = prev_business_day(date.fromisoformat(cfg["apply"][:10])).isoformat()   # 적용일 전 영업일 종가 매매
-        ev["passed"] = ev["trade_date"] < today
+        ev["trade_date"] = cfg["cycle"]["trade_date"]
+        ev["trade_end"] = cfg["cycle"]["trade_end"]
+        ev["passed"] = event_has_passed(cfg["cycle"], now)
         out["events"].append(ev)
         if ev["passed"]:   # 매매 끝난 이벤트: 스냅샷은 archive.py 가 보관, 합산·표시에서 제외
             continue
@@ -284,7 +318,8 @@ def main():
     if semi_p.exists():
         semi = json.loads(semi_p.read_text(encoding="utf-8"))
         sc = semi["scenarios"]["current"]
-        for r in (sc["rows"] if semi["expiry"] >= today else []):
+        semi_active = semi["expiry"] > today or (semi["expiry"] == today and now.time() < MARKET_CLOSE)
+        for r in (sc["rows"] if semi_active else []):
             if not r.get("flow_total"):
                 continue
             out["by_stock"].setdefault(r["code"], {"name": r["name"], "events": [], "total": 0.0})

@@ -21,17 +21,18 @@ import json
 import math
 import sqlite3
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 from analyze import period_stats, is_excluded_name
+from calendar_events import next_cycle, review_availability
+from market_dates import anchor_stocks, completed_adv, korea_now, latest_completed_date, require_current_prices
+from flow_engine import water_fill
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).parent
 DATA = ROOT / "data"
 
-REF_DATE = "20260731"
-PERIOD = ("20260501", "20260731")
-EXPIRY, APPLY = "2026-09-10", "2026-09-11"
 CAP = 0.20
 CUM_SEC, LIQ_SEC, MIN_N = 0.95, 0.90, 20
 MIDLARGE_CUM = 0.94
@@ -43,23 +44,6 @@ ETFS = [
     {"key": "krx_semi_tiger", "code": "091230", "name": "TIGER 반도체", "mult": 1.0},
     {"key": "krx_semi_lev", "code": "494310", "name": "KODEX 반도체레버리지", "mult": 2.0},
 ]
-
-
-def water_fill(weights, cap):
-    """단일종목 비중상한 적용 (초과분을 미상한 종목에 비례 재배분, 반복)"""
-    tot = sum(weights.values())
-    w = {k: v / tot for k, v in weights.items()}
-    capped = set()
-    for _ in range(60):
-        over = [k for k, v in w.items() if v > cap + 1e-12 and k not in capped]
-        if not over:
-            break
-        capped |= set(over)
-        free = 1 - cap * len(capped)
-        rest = {k: v for k, v in w.items() if k not in capped}
-        s = sum(rest.values())
-        w = {k: (cap if k in capped else v / s * free) for k, v in w.items()}
-    return w, capped
 
 
 def coverage_select(items, cum_pct, coverage_cap=None):
@@ -87,33 +71,46 @@ def main():
     stocks = {r["code"]: dict(r) for r in con.execute("SELECT * FROM stock")}
     holdings = json.loads((DATA / "holdings.json").read_text(encoding="utf-8"))
     etf_list = {e["code"]: e for e in json.loads((DATA / "etf_master.json").read_text(encoding="utf-8"))}
-    fif_global = json.loads((DATA / "analysis.json").read_text(encoding="utf-8")).get("fif", {})
-    stats = period_stats(con, *PERIOD)
-    last_date = con.execute("SELECT max(date) FROM daily").fetchone()[0]
-    adv = {r[0]: r[1] for r in con.execute(
-        "SELECT code, AVG(trdval) FROM (SELECT code, trdval, ROW_NUMBER() OVER (PARTITION BY code ORDER BY date DESC) rn FROM daily) WHERE rn<=20 GROUP BY code")}
+    analysis = json.loads((DATA / "analysis.json").read_text(encoding="utf-8"))
+    fif_global = analysis.get("fif", {})
+    cycle = next_cycle("krx_semi", korea_now().date())
+    period = (cycle["period_start"], cycle["period_end"])
+    last_date = latest_completed_date(con)
+    if analysis.get("last_daily") != last_date:
+        raise ValueError("분석과 반도체 수급의 시세 기준일이 다릅니다. analyze.py를 먼저 실행하세요.")
+    stocks = anchor_stocks(con, stocks, last_date, current=True)
+    require_current_prices(stocks, {r["code"] for e in ETFS for r in holdings.get(e["key"], {}).get("rows", [])
+                                   if r.get("code") and r.get("weight") is not None}, "KRX 반도체")
+    availability = review_availability(cycle, last_date)
+    pending = availability == "pending_review"
+    stats = period_stats(con, *period, as_of=last_date) if not pending else {}
+    adv = completed_adv(con, last_date)
+    listing_cutoff = (date(int(period[0][:4]), int(period[0][4:6]), 1) - timedelta(days=1)).strftime("%Y%m%d")
 
     # ---- KRX TMI 유니버스 → 중대형 TMI ----
     tmi = []
     for c, s in stocks.items():
-        if not s["is_common"] or c[0] == "9" or is_excluded_name(s["name"]):
+        if not s["review_ready"] or not s["is_common"] or c[0] == "9" or is_excluded_name(s["name"]):
             continue
         ld = (s.get("listing_date") or "").replace("-", "")
-        if ld and ld > "20260430":
+        if ld and ld > listing_cutoff:
             continue
         ps = stats.get(c)
         if not ps or not ps["avg_mcap"] or ps["n"] < 15:
             continue
         tmi.append((c, ps["avg_mcap"]))
-    ml_sel, ml_cut = coverage_select(tmi, MIDLARGE_CUM, coverage_cap=0.10)
+    ml_sel, ml_cut = coverage_select(tmi, MIDLARGE_CUM, coverage_cap=0.10) if not pending else ([], None)
     midlarge = {c for c, _ in ml_sel}
 
     cur_rows = {r["code"]: r for r in holdings["krx_semi"]["rows"] if r.get("code")}
     # 섹터 유니버스: KRX 공식 GICS 산업그룹 4530(반도체및반도체장비) ∪ 현행 구성종목
-    semis = {c for c, s in stocks.items() if s.get("gics_ig") == "4530" and s["is_common"]} | set(cur_rows)
+    semis = {c for c, s in stocks.items() if s["review_ready"] and s.get("gics_ig") == "4530" and s["is_common"]} | set(cur_rows)
+    if pending:
+        semis = set(cur_rows)
     # GICS 분류 추론: 2025년 9월 정기변경 심사기간(2025.5~7월) 기준으로 이미 규모요건을 충족했는데도 현행 지수에 없는 종목은
     # KRX(GICS)상 반도체가 아닌 것으로 추정 → 심사대상에서 제외 (현행 구성종목 중 최소 규모 종목의 2025.5~7월 일평균시총을 기준선으로 사용)
-    stats25 = period_stats(con, "20250501", "20250731")
+    previous_cycle = next_cycle("krx_semi", date(int(cycle["apply"][:4]) - 1, 1, 1))
+    stats25 = period_stats(con, previous_cycle["period_start"], previous_cycle["period_end"], last_date) if not pending else {}
     cur_min25 = min((stats25[c]["avg_mcap"] for c in cur_rows if c in stats25 and stats25[c]["avg_mcap"]), default=None)
     gics_inferred = {}
     for c in semis:
@@ -131,13 +128,17 @@ def main():
         for c in semis:
             s = stocks[c]
             ps = stats.get(c)
+            if pending:
+                # 다음 심사기간 자료가 없으면 현행 구성의 캡 조정만 계산한다.
+                ps = {"avg_mcap": s["mktcap"], "avg_trdval": adv.get(c) or 0, "n": 0}
             if not ps or not ps["avg_mcap"]:
                 continue
             univ.append({"code": c, "name": s["name"], "market": s["market"], "avg_mcap": ps["avg_mcap"], "avg_trdval": ps["avg_trdval"],
                          "n_days": ps["n"], "is_cur": c in cur_rows, "w_cur": cur_rows.get(c, {}).get("weight"),
                          "in_midlarge": c in midlarge, "gics_excluded": GICS_NOT_SEMI.get(c) or gics_inferred.get(c),
-                         "avg_mcap_2025": stats25.get(c, {}).get("avg_mcap"),
-                         "mktcap_now": s["mktcap"], "close": s["close"], "wics_mid": s.get("wics_mid"), "listing_date": s.get("listing_date")})
+                         "avg_mcap_previous_review": stats25.get(c, {}).get("avg_mcap"),
+                         "mktcap_now": s["mktcap"], "close": s["close"], "wics_mid": s.get("wics_mid"), "listing_date": s.get("listing_date"),
+                         "price_as_of": s.get("price_as_of"), "price_status": s.get("price_status"), "universe_as_of": s.get("universe_as_of")})
         return univ
 
     # FIF 추정 (기존 비상한 종목: KODEX 반도체 비중/시총 역산, 상위 10분위=1.0)
@@ -155,8 +156,13 @@ def main():
         return round(med, 3), "중앙값 가정"
 
     def run_scenario(coverage_cap, current_only=False):
+        if pending and not current_only:
+            return {"coverage_cap": coverage_cap, "current_only": False, "unavailable": True,
+                    "reason": "다음 심사기간 시작 전이므로 구성종목 선정 시나리오는 아직 계산할 수 없습니다.",
+                    "n_eligible": None, "n_selected": None, "liq_cut": None, "capped": [],
+                    "etfs": [], "rows": [], "adds": [], "dels": [], "total_buy_eok": 0, "total_sell_eok": 0}
         univ = build_universe()
-        elig = [u for u in univ if u["in_midlarge"] and not u["gics_excluded"] and (u["is_cur"] or not current_only)]
+        elig = [u for u in univ if (u["in_midlarge"] or pending) and not u["gics_excluded"] and (u["is_cur"] or not current_only)]
         elig.sort(key=lambda u: -u["avg_mcap"])
         by_trd = sorted(elig, key=lambda u: -u["avg_trdval"])
         liq_cut = math.floor(len(elig) * LIQ_SEC + 1e-9)
@@ -184,7 +190,7 @@ def main():
         for u in univ:
             if u["gics_excluded"]:
                 u["status"] = "심사제외(GICS 비반도체 추정)"
-            elif not u["in_midlarge"]:
+            elif not u["in_midlarge"] and not pending:
                 u["status"] = "편출(중대형 TMI 밖)" if u["is_cur"] else "심사제외(중대형 밖)"
             elif u["code"] in sel:
                 u["status"] = ("유지" if u["is_cur"] else "신규편입") + ("(20종목 보충)" if u.get("filled") else "")
@@ -237,6 +243,10 @@ def main():
             u["w_cur_adj"] = u.get("w_cur_etf", {}).get("091160", 0.0)
             u["delta"] = u["w_target"] - u["w_cur_adj"]
         univ.sort(key=lambda u: -abs(u["flow_total"]))
+        if pending:
+            for u in univ:
+                u.update(avg_mcap=None, avg_trdval=None, in_midlarge=None, mcap_rank=None, cum_share=None,
+                         primary=None, trd_rank=None, liq_ok=None)
         return {"coverage_cap": coverage_cap, "current_only": current_only, "n_eligible": len(elig), "n_selected": len(sel), "liq_cut": liq_cut, "capped": sorted(capped),
                 "etfs": etf_meta, "rows": univ,
                 "adds": [u["code"] for u in univ if u["status"].startswith("신규편입")],
@@ -245,19 +255,23 @@ def main():
                 "total_sell_eok": round(sum(u["flow_total"] for u in univ if u["flow_total"] < 0), 1)}
 
     out = {
-        "index": "KRX 반도체", "ref_date": REF_DATE, "period": PERIOD, "expiry": EXPIRY, "apply": APPLY, "data_through": last_date,
-        "pdf_date": holdings["krx_semi"]["date"], "n_current": len(cur_rows), "n_midlarge": len(midlarge), "midlarge_cutoff_mcap": ml_cut,
+        "index": "KRX 반도체", "ref_date": cycle["ref_date"], "period": period, "expiry": cycle["expiry"], "apply": cycle["apply"], "data_through": last_date,
+        "window": cycle, "date_status": cycle["date_status"], "data_quality": analysis.get("data_quality"), "availability": availability,
+        "availability_note": "심사기간 시작 전 · 현행 구성종목의 비중·캡 조정만 계산하며 편출입 예측은 대기합니다." if pending else "",
+        "pdf_date": holdings["krx_semi"]["date"], "n_current": len(cur_rows), "n_midlarge": None if pending else len(midlarge), "midlarge_cutoff_mcap": ml_cut,
         "rules": "심사대상 = KRX 중대형 TMI(5~7월 일평균시총, 누적 94%·커버리지 CAP 10%) ∩ KRX 공식 GICS 반도체및반도체장비(4530) → 일평균시총 누적 95% & 거래대금 상위 90%(최소 20종목) → 유동시총 가중·20% CAP",
         "krx_notices": ["2026-09-04 '26년 9월 KRX 100 지수 및 KRX 섹터지수 구성종목 정기변경 (반영일 9/11, 상세는 지수정보상품)",
                         "2026-09-04 '26년 9월 CAP Factor 정기변경 (KRX 100·섹터지수 17종, 9/11)",
                         "2026-09-04 '26.9월 KRX TMI 지수 정기변경 (커버리지 계산 시 개별종목 CAP 10% 적용)"],
-        "gics_excluded": {**GICS_NOT_SEMI, **{c: v for c, v in gics_inferred.items()}}, "cur_min_mcap_2025": cur_min25,
+        "gics_excluded": {**GICS_NOT_SEMI, **{c: v for c, v in gics_inferred.items()}}, "cur_min_mcap_previous_review": cur_min25,
         "scenarios": {"current": run_scenario(0.10, current_only=True), "cap10": run_scenario(0.10), "literal": run_scenario(None)},
         "scenario_desc": {
-            "current": "A. 편출입 없음 — 현행 35종목 그대로 유동시총 가중·20% CAP 복원만 반영 (플로우 하한선, 확신도 높음)",
+            "current": f"A. 편출입 없음 — 현행 {len(cur_rows)}종목 그대로 유동시총 가중·20% CAP 복원만 반영 (구성 유지 가정)",
             "cap10": "B. 커버리지 CAP 10% — KRX가 9/4 TMI 공지에서 밝힌 방식(누적 시총 계산 시 개별종목 10% CAP)을 섹터지수에도 적용. WICS 반도체 중 GICS 미확인 후보 편입 포함(불확실)",
             "literal": "C. 방법론 문언 — 단순 누적 95%·거래대금 90%·최소 20종목 → 소형주 대거 편출 (현행 35종목 구성과 상충, 참고용)"},
     }
+    if cycle["apply"] != "2026-09-11":
+        out["krx_notices"] = []  # 과거 공지를 새 회차의 확정 공지로 표시하지 않는다.
     (DATA / "krx_semi_rebal.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     for k, sc in out["scenarios"].items():
         print(f"[{k}] eligible {sc['n_eligible']} → selected {sc['n_selected']} (cur {len(cur_rows)}) | buy {sc['total_buy_eok']:,.0f}억 sell {sc['total_sell_eok']:,.0f}억")

@@ -1,0 +1,299 @@
+{
+  "event_id": "DEMO_2026-09-14",
+  "as_of": "2026-09-11T13:05:00+09:00",
+  "plan_scope": "remaining_at_window_start",
+  "plan_available_at": "2026-09-11T08:50:00+09:00",
+  "target_known_at": "2026-09-11T08:50:00+09:00",
+  "plan_warnings": [],
+  "unavailable_snapshot_count": 0,
+  "window_start": "2026-09-11T09:00:00+09:00",
+  "observed_through": "2026-09-11T13:00:00+09:00",
+  "stale_seconds": 300.0,
+  "status": "basket_alignment_only",
+  "estimand": "conditional_common_fraction_basket_alignment",
+  "actual_etf_pretrade_shares": null,
+  "actual_etf_completion_fraction": null,
+  "basket_aligned_fraction": 0.3999999999999999,
+  "projection_fraction_raw": 0.3999999999999999,
+  "projection_fraction_clipped": null,
+  "common_fraction_feasible_interval": [
+    0.35,
+    0.45
+  ],
+  "buy_side_fraction_raw": 0.4,
+  "sell_side_fraction_raw": 0.4,
+  "normalized_residual_rms": 1.941467644665148e-15,
+  "observed_notional_coverage": 1.0,
+  "supported_stock_count": 4,
+  "excluded_rows": [],
+  "attribution_scenarios": [
+    {
+      "label": "ETF 귀속 0% 가정",
+      "etf_share": 0.0,
+      "interpretation": "conditional_attribution_not_identified_execution",
+      "status": "conditional_attribution",
+      "conditional_completion_fraction": 0.0,
+      "conditional_completion_interval": [
+        0.0,
+        0.0
+      ],
+      "rows": [
+        {
+          "code": "DEMO_BUY_A",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": 0.0,
+          "conditional_remaining_shares": 1000000.0,
+          "conditional_pretrade_range": [
+            0.0,
+            0.0
+          ],
+          "conditional_remaining_range": [
+            1000000.0,
+            1000000.0
+          ]
+        },
+        {
+          "code": "DEMO_BUY_B",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": 0.0,
+          "conditional_remaining_shares": 500000.0,
+          "conditional_pretrade_range": [
+            0.0,
+            0.0
+          ],
+          "conditional_remaining_range": [
+            500000.0,
+            500000.0
+          ]
+        },
+        {
+          "code": "DEMO_SELL_C",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": -0.0,
+          "conditional_remaining_shares": -800000.0,
+          "conditional_pretrade_range": [
+            -0.0,
+            -0.0
+          ],
+          "conditional_remaining_range": [
+            -800000.0,
+            -800000.0
+          ]
+        },
+        {
+          "code": "DEMO_SELL_D",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": -0.0,
+          "conditional_remaining_shares": -400000.0,
+          "conditional_pretrade_range": [
+            -0.0,
+            -0.0
+          ],
+          "conditional_remaining_range": [
+            -400000.0,
+            -400000.0
+          ]
+        }
+      ]
+    },
+    {
+      "label": "ETF 귀속 50% 가정",
+      "etf_share": 0.5,
+      "interpretation": "conditional_attribution_not_identified_execution",
+      "status": "conditional_attribution",
+      "conditional_completion_fraction": 0.19999999999999996,
+      "conditional_completion_interval": [
+        0.175,
+        0.225
+      ],
+      "rows": [
+        {
+          "code": "DEMO_BUY_A",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": 199999.99999999994,
+          "conditional_remaining_shares": 800000.0,
+          "conditional_pretrade_range": [
+            175000.0,
+            225000.0
+          ],
+          "conditional_remaining_range": [
+            775000.0,
+            825000.0
+          ]
+        },
+        {
+          "code": "DEMO_BUY_B",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": 99999.99999999997,
+          "conditional_remaining_shares": 400000.0,
+          "conditional_pretrade_range": [
+            87500.0,
+            112500.0
+          ],
+          "conditional_remaining_range": [
+            387500.0,
+            412500.0
+          ]
+        },
+        {
+          "code": "DEMO_SELL_C",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": -159999.99999999997,
+          "conditional_remaining_shares": -640000.0,
+          "conditional_pretrade_range": [
+            -180000.0,
+            -140000.0
+          ],
+          "conditional_remaining_range": [
+            -660000.0,
+            -620000.0
+          ]
+        },
+        {
+          "code": "DEMO_SELL_D",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": -79999.99999999999,
+          "conditional_remaining_shares": -320000.0,
+          "conditional_pretrade_range": [
+            -90000.0,
+            -70000.0
+          ],
+          "conditional_remaining_range": [
+            -330000.0,
+            -310000.0
+          ]
+        }
+      ]
+    },
+    {
+      "label": "ETF 귀속 100% 가정",
+      "etf_share": 1.0,
+      "interpretation": "conditional_attribution_not_identified_execution",
+      "status": "conditional_attribution",
+      "conditional_completion_fraction": 0.3999999999999999,
+      "conditional_completion_interval": [
+        0.35,
+        0.45
+      ],
+      "rows": [
+        {
+          "code": "DEMO_BUY_A",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": 399999.9999999999,
+          "conditional_remaining_shares": 600000.0000000001,
+          "conditional_pretrade_range": [
+            350000.0,
+            450000.0
+          ],
+          "conditional_remaining_range": [
+            550000.0,
+            650000.0
+          ]
+        },
+        {
+          "code": "DEMO_BUY_B",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": 199999.99999999994,
+          "conditional_remaining_shares": 300000.00000000006,
+          "conditional_pretrade_range": [
+            175000.0,
+            225000.0
+          ],
+          "conditional_remaining_range": [
+            275000.0,
+            325000.0
+          ]
+        },
+        {
+          "code": "DEMO_SELL_C",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": -319999.99999999994,
+          "conditional_remaining_shares": -480000.00000000006,
+          "conditional_pretrade_range": [
+            -360000.0,
+            -280000.0
+          ],
+          "conditional_remaining_range": [
+            -520000.0,
+            -440000.00000000006
+          ]
+        },
+        {
+          "code": "DEMO_SELL_D",
+          "status": "conditional_attribution",
+          "conditional_pretrade_shares": -159999.99999999997,
+          "conditional_remaining_shares": -240000.00000000003,
+          "conditional_pretrade_range": [
+            -180000.0,
+            -140000.0
+          ],
+          "conditional_remaining_range": [
+            -260000.0,
+            -220000.00000000003
+          ]
+        }
+      ]
+    }
+  ],
+  "assumptions": {
+    "common_fraction_across_stocks": true,
+    "no_reversal_and_no_overtrade": true,
+    "frozen_remaining_target_at_window_start": true
+  },
+  "warnings": [
+    "Untagged flows cannot distinguish ETF executions from other investors or front-runners.",
+    "Error bounds are user-supplied sensitivity inputs, not confidence intervals.",
+    "Separate event fits may reuse overlapping flows; do not sum event attributions.",
+    "A remaining exposure gap is not a guaranteed closing-auction cash order; creations, redemptions and derivatives remain unresolved."
+  ],
+  "rows": [
+    {
+      "code": "DEMO_BUY_A",
+      "name": "가상 매수 A",
+      "required_shares": 1000000.0,
+      "actual_etf_pretrade_shares": null,
+      "basket_aligned_shares": 399999.9999999999,
+      "conditional_common_fraction_remaining_range": null,
+      "remaining_shares_unidentified_range": [
+        0.0,
+        1000000.0
+      ]
+    },
+    {
+      "code": "DEMO_BUY_B",
+      "name": "가상 매수 B",
+      "required_shares": 500000.0,
+      "actual_etf_pretrade_shares": null,
+      "basket_aligned_shares": 199999.99999999994,
+      "conditional_common_fraction_remaining_range": null,
+      "remaining_shares_unidentified_range": [
+        0.0,
+        500000.0
+      ]
+    },
+    {
+      "code": "DEMO_SELL_C",
+      "name": "가상 매도 C",
+      "required_shares": -800000.0,
+      "actual_etf_pretrade_shares": null,
+      "basket_aligned_shares": -319999.99999999994,
+      "conditional_common_fraction_remaining_range": null,
+      "remaining_shares_unidentified_range": [
+        -800000.0,
+        0.0
+      ]
+    },
+    {
+      "code": "DEMO_SELL_D",
+      "name": "가상 매도 D",
+      "required_shares": -400000.0,
+      "actual_etf_pretrade_shares": null,
+      "basket_aligned_shares": -159999.99999999997,
+      "conditional_common_fraction_remaining_range": null,
+      "remaining_shares_unidentified_range": [
+        -400000.0,
+        0.0
+      ]
+    }
+  ]
+}
