@@ -10,11 +10,11 @@ import sqlite3
 import json
 import sys
 import time
-from datetime import date
 
 import requests
 
 from fetch_market import DB
+from market_dates import completed_session_date
 
 sys.stdout.reconfigure(encoding="utf-8")
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126",
@@ -44,7 +44,8 @@ def fetch_group(s, code, dt):
 
 def main():
     s = requests.Session()
-    dt = date.today().strftime("%Y%m%d")
+    # 당일 자료는 장 마감 전 빈 목록 → 08:10 정기실행에서도 완료된 직전 거래일 기준으로 조회
+    dt = completed_session_date().strftime("%Y%m%d")
     con = sqlite3.connect(DB)
     for col in ("gics_ig", "gics_ig_nm", "gics_sec"):
         try:
