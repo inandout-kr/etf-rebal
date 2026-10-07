@@ -244,6 +244,31 @@ class PendingReviewTests(unittest.TestCase):
         self.assertEqual(result["dels"], [])
         self.assertAlmostEqual(sum(r["w_target"] for r in result["rows"]), 100)
 
+    def test_flow_tiny_target_weight_keeps_raw_value_for_validation(self):
+        from validate_data import validate_flow_rows
+        tiny = self.rows[-1]["code"]
+        self.con.execute("UPDATE daily SET shares=0.0001 WHERE code=?", (tiny,))
+        rows = [dict(r, weight=1e-5 if r["code"] == tiny else (100 - 1e-5) / 9) for r in self.rows]
+        self.payloads = {
+            "holdings.json": {"fn_top10": {"etf_code": "292150", "date": "2026-09-10", "rows": rows}},
+            "etf_master.json": [{"code": "292150", "name": "TOP10", "aum_eok": 1000}],
+            "analysis.json": {"generated": "2026-09-15 10:00", "last_daily": "20260910", "fn_top10": {"availability": "pending_review"}},
+        }
+        with patch.object(flow_engine.sqlite3, "connect", return_value=self.con), \
+             patch.object(flow_engine, "korea_now", return_value=datetime(2026, 9, 15, 10)), \
+             patch.object(flow_engine, "CONFIGS", [flow_engine.CONFIGS[0]]), \
+             patch.object(Path, "read_text", lambda p, **kw: self.read_json(p, **kw)), \
+             patch.object(Path, "write_text", lambda p, t, **kw: self.capture_json(p, t, **kw)), \
+             patch.object(Path, "exists", return_value=False), \
+             contextlib.redirect_stdout(io.StringIO()):
+            flow_engine.main()
+        event = self.writes["flows.json"]["events"][0]
+        row = next(r for r in event["rows"] if r["code"] == tiny)
+        self.assertEqual((row["status"], row["w_target"]), ("유지", 0.0))
+        self.assertGreater(row["w_target_raw"], 0)
+        self.assertEqual(event["n_target"], 10)
+        validate_flow_rows(event["rows"], event["key"], event["n_target"], event["total_buy"], event["total_sell"])
+
 
 class WeightTests(unittest.TestCase):
     def test_caps_preserve_total(self):

@@ -158,6 +158,33 @@ class QualityTests(unittest.TestCase):
         rows[0].update(w_target=60.001, delta=10.001, flow_by_etf={"a": 5.0, "b": 5.1}, flow_total=10.0)
         validate_flow_rows(rows, "rounded", 2)
 
+    def test_tiny_target_weight_shown_as_zero_is_counted(self):
+        def tiny_rows():   # 세아제강지주(003030) 2026-10-06: 목표 약 0.0004867% → 표시 0.000%
+            rows = [dict(r, status="유지", w_target_raw=r["w_target"]) for r in flow_rows()]
+            rows.append({"code": "003030", "name": "세아제강지주", "status": "유지", "w_cur": 0.0, "w_target": 0.0,
+                         "w_target_raw": 0.0004867, "delta": 0.0, "flow_by_etf": {"069500": 0.0}, "flow_total": 0.0})
+            return rows
+
+        validate_flow_rows(tiny_rows(), "tiny", 3, 10, -10)
+        # rebal_flow 산출물은 w_target 자체가 반올림 전 값이다.
+        semi = [{k: v for k, v in r.items() if k != "w_target_raw"} for r in tiny_rows()]
+        semi[2]["w_target"] = 0.0004867
+        validate_flow_rows(semi, "semi", 3, 10, -10)
+        for name, mutate, count in (
+            ("missing", lambda rows: rows.pop(), 3),
+            ("duplicate", lambda rows: rows[2].update(code="005930"), 3),
+            ("wrong zero", lambda rows: rows[2].update(w_target_raw=0.0), 3),
+            ("zero member with status", lambda rows: rows[2].update(w_target_raw=0.0, status="신규편입"), 2),
+            ("removed stock keeps weight", lambda rows: rows[2].update(status="편출"), 3),
+            ("raw disagrees with display", lambda rows: rows[2].update(w_target_raw=0.01), 3),
+        ):
+            rows = tiny_rows()
+            mutate(rows)
+            with self.subTest(name), self.assertRaises(DataQualityError):
+                validate_flow_rows(rows, name, count, 10, -10)
+        with self.assertRaises(DataQualityError):
+            validate_flow_rows(tiny_rows(), "expected 199 must not pass", 2, 10, -10)
+
     def test_stale_semiconductor_artifact_blocks_build(self):
         data = artifacts()
         data["krx_semi_rebal"]["data_through"] = "20260102"

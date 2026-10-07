@@ -287,8 +287,9 @@ def main():
             f = flows.get(c, {})
             tot = sum(f.values())
             st = ("유지" if c in tgt else "편출") if c in cur else "신규편입"
+            # w_target 은 화면 표시용 3자리 반올림, w_target_raw 는 검증용 원값 (0.0005% 미만 양수 비중이 0.000 으로 보이는 경우)
             rows.append({"code": c, "name": stocks[c]["name"], "status": st, "w_cur": round(cur_w.get(c, 0), 3), "w_target": round(w_t.get(c, 0) * 100, 3),
-                         "delta": round(w_t.get(c, 0) * 100 - cur_w.get(c, 0), 3), "fixed": c in fixed, "capped": c in capped,
+                         "w_target_raw": w_t.get(c, 0) * 100, "delta": round(w_t.get(c, 0) * 100 - cur_w.get(c, 0), 3), "fixed": c in fixed, "capped": c in capped,
                          "flow_by_etf": {k: round(v, 1) for k, v in f.items()}, "flow_total": round(tot, 1),
                          "adv20": adv.get(c), "adv_mult": (abs(tot) * 1e8 / adv[c]) if adv.get(c) else None,
                          "fif": round(fifs[c][0], 3), "fif_src": fifs[c][1], "mktcap_now": stocks[c]["mktcap"],

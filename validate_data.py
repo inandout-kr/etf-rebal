@@ -51,11 +51,20 @@ def validate_flow_rows(rows, label, target_count=None, total_buy=None, total_sel
     weight_tolerance = len(rows) * .00051 + .01
     require(abs(sum(r["w_target"] for r in rows) - 100) <= weight_tolerance,
             f"{label}: 목표 비중 합계가 100%가 아님")
+    # Counts use the unrounded weight: a tiny positive target can be published as 0.000.
+    # rebal_flow rows carry no w_target_raw because their w_target is not rounded.
+    raw = {r["code"]: r.get("w_target_raw", r["w_target"]) for r in rows}
     if target_count is not None:
-        positive = sum(r["w_target"] > 0 for r in rows)
+        positive = sum(w > 0 for w in raw.values())
         require(positive == target_count, f"{label}: 목표 종목 수 불일치 ({positive}/{target_count})")
     for row in rows:
-        require(0 <= row["w_target"] <= 100, f"{label}/{row['code']}: 목표 비중 범위 오류")
+        require(0 <= row["w_target"] <= 100 and 0 <= raw[row["code"]] <= 100, f"{label}/{row['code']}: 목표 비중 범위 오류")
+        require(abs(raw[row["code"]] - row["w_target"]) <= .0005 + 1e-9, f"{label}/{row['code']}: 표시 목표 비중과 원 비중 불일치")
+        status = row.get("status") or ""
+        if status.startswith(("유지", "신규편입")):
+            require(raw[row["code"]] > 0, f"{label}/{row['code']}: 목표 편입 종목의 목표 비중이 0")
+        elif status.startswith("편출"):
+            require(raw[row["code"]] == 0, f"{label}/{row['code']}: 편출 종목에 목표 비중 배정")
         current = row.get("w_cur_adj", row.get("w_cur"))
         if current is not None:
             require(0 <= current <= 100, f"{label}/{row['code']}: 현재 비중 범위 오류")
