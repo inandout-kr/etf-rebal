@@ -126,7 +126,7 @@ class FxTests(unittest.TestCase):
             self.assertEqual(quality["status"], "unavailable")
 
     def test_success_separates_source_time_from_fetch_time(self):
-        response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"closePrice": "1,420.3", "localTradedAt": "2026-09-10T15:30:00+09:00"})
+        response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"exchangeInfo": {"closePrice": "1,420.3", "localTradedAt": "2026-09-10T15:30:00+09:00"}})
         value, quality = self.fetch({}, response)
         self.assertEqual(value, 1420.3)
         self.assertEqual(quality["status"], "ok")

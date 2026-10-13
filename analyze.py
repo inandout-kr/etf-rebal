@@ -616,9 +616,10 @@ def fetch_usdkrw(previous=None, now=None):
     previous = previous or {}
     try:
         import requests
-        r = requests.get("https://m.stock.naver.com/api/marketindex/exchange/FX_USDKRW", headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        # 2026-10 m.stock.naver.com 경로가 404로 바뀜 → api.stock.naver.com (값은 exchangeInfo 아래)
+        r = requests.get("https://api.stock.naver.com/marketindex/exchange/FX_USDKRW", headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         r.raise_for_status()
-        payload = r.json()
+        payload = r.json()["exchangeInfo"]
         value = float(str(payload.get("closePrice")).replace(",", ""))
         if not math.isfinite(value) or value <= 0:
             raise ValueError("환율이 유효한 양수가 아닙니다")

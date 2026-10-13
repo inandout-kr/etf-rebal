@@ -203,7 +203,7 @@ class FxBoundaryTests(unittest.TestCase):
         self.assertEqual(len(analyze.msci_watch(stocks, hold, 1400, fx_quality=self.quality, now=self.now)["candidates"]), 1)
 
     def test_live_missing_timestamp_does_not_become_verified(self):
-        response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"closePrice": "1,400"})
+        response = SimpleNamespace(raise_for_status=lambda: None, json=lambda: {"exchangeInfo": {"closePrice": "1,400"}})
         with patch.dict("sys.modules", {"requests": SimpleNamespace(get=lambda *a, **kw: response)}):
             value, quality = analyze.fetch_usdkrw({}, self.now)
         self.assertIsNone(value)
