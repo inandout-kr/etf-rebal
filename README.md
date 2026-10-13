@@ -33,7 +33,7 @@ Windows 예약 작업 `ETF-Rebal-Daily`는 매일 08:10에 `powershell.exe`로 `
 
 ## 주요 가정·한계
 
-- **2026년 12월 KOSPI 200·KOSDAQ 150 결과는 GICS 기준 참고 시나리오이며 KRICS를 아직 반영하지 않았습니다.** KRICS 9개 산업군 적용 예정일은 2026-11-02입니다. 종목별 분류 공표 예정일인 10월 26일 이후 공식 분류·개정 방법론으로 재산정해야 합니다. 관련 수급과 KOSPI 100·코스피200 IT 결과에도 같은 제한이 적용됩니다. 개정 안내: [DB자산운용](https://db-asset.com/mob/kr/customer/notice/9920), [삼성증권](https://www.samsungsecurities.co.kr/kor/invest/announce_view.do?create_date=20261002&create_time=130443&seq_no=100828).
+- **현재 KOSPI 200·KOSDAQ 150 예측은 현행 GICS 산업분류와 선정 기준으로 계산합니다.** KRICS는 종목별 공식 분류 확인 전까지 접을 수 있는 참고사항으로 안내하며 계산에는 반영하지 않습니다. KRICS 9개 산업군 방법론 적용 예정일은 2026-11-02, 종목별 분류 공표 예정일은 10월 26일입니다. 공식 분류·개정 방법론 확인 후 관련 수급과 KOSPI 100·코스피200 IT를 포함해 재검토해야 합니다. 개정 안내: [DB자산운용](https://db-asset.com/mob/kr/customer/notice/9920), [삼성증권](https://www.samsungsecurities.co.kr/kor/invest/announce_view.do?create_date=20261002&create_time=130443&seq_no=100828).
 - 산업군은 KRX 인덱스 사이트가 공개하는 공식 GICS 산업분류를 사용합니다(미분류 종목만 섹터 ETF·WICS로 보완). 과거 정기변경 재현 성적은 `data/backtest_june.json`에서 계산해 화면에 표시합니다. 현재 분류·구성종목에서 과거 상태를 역산하므로 당시 정보를 그대로 동결한 사전 예측 검증과는 차이가 있으며, 오차 원인을 정성 판단만으로 단정하지 않습니다.
 - 관리종목·투자주의환기종목·정리매매종목·유동주식비율 10% 미만 요건은 데이터가 없어 미반영입니다.
 - 유동비율(FIF)은 KODEX 200·KODEX 코스닥150·TIGER MSCI Korea ETF 비중에서 역산한 추정치입니다.

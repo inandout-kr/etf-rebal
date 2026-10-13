@@ -443,12 +443,12 @@ function krxBasisBadge(key){
   const parent={kospi100:'kospi200',kospi200_it:'kospi200'}[key]||key;
   const classification=A[parent]?.classification;
   const pending=classification?classification.status==='reference_pending_krics':KB[parent]?.classification_transition?.pending;
-  return pending?'<span class="badge warn">GICS 참고 · KRICS 미반영</span>':'';
+  return pending?'<span class="badge acc">현행 GICS 기준</span>':'';
 }
 function krxTransitionNotice(){
   const transition=KB.kospi200?.classification_transition||KB.kosdaq150?.classification_transition;
   if(!transition?.pending||!['kospi200','kosdaq150'].some(key=>krxBasisBadge(key))) return '';
-  return `<div class="callout" role="status"><b>KOSPI 200·KOSDAQ 150: GICS 기준 참고 시나리오 · KRICS 전환 전</b><br>KRICS ${fmt.n(transition.sector_count)}개 산업군 적용 예정 ${esc(transition.effective_date)}. 종목별 분류 공표 예정 ${esc(transition.classification_expected_date)} 이후 공식 분류·개정 방법론으로 재산정이 필요합니다. 아래 결과는 KRICS를 반영하지 않았습니다. 관련 수급과 KOSPI 100·코스피200 IT도 같은 제한이 적용됩니다.<br>${(transition.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)} →</a>`).join(' · ')}</div>`;
+  return note('참고 · KRICS 산업분류 전환 예정', `<b>현재 예측은 현행 GICS 산업분류와 선정 기준으로 계산합니다.</b> KRICS는 종목별 공식 분류 확인 전까지 참고사항으로 안내하며, 계산에 반영하지 않았습니다.<br>KRICS ${fmt.n(transition.sector_count)}개 산업군 방법론 적용 예정 ${esc(transition.effective_date)} · 종목별 분류 공표 예정 ${esc(transition.classification_expected_date)}. 공식 분류·개정 방법론 확인 후 KOSPI 200·KOSDAQ 150과 관련 수급, KOSPI 100·코스피200 IT를 재검토해야 합니다.<br>${(transition.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)} →</a>`).join(' · ')}`);
 }
 function krxScenarioNotice(idx){
   const rule=idx.smallcap_rule;
