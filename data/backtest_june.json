@@ -2,6 +2,7 @@
  "kospi200": {
   "name": "KOSPI 200",
   "review": "2026.06 (심사기준일 2026-04-30, 심사기간 2025-11~2026-04, KRX 5/22 공표)",
+  "smallcap_rule": null,
   "adds_hit": [
    "DB하이텍",
    "HD건설기계",
@@ -24,6 +25,17 @@
  "kosdaq150": {
   "name": "KOSDAQ 150",
   "review": "2026.06 (심사기준일 2026-04-30, 심사기간 2025-11~2026-04, KRX 5/22 공표)",
+  "smallcap_rule": {
+   "applied": true,
+   "discretionary": true,
+   "threshold_rank": 300,
+   "base_adds": 17,
+   "base_dels": 18,
+   "base_n_selected": 150,
+   "removed": [],
+   "replacements": [],
+   "unreplaced": []
+  },
   "adds_hit": [
    "미래에셋벤처투자",
    "브이엠",

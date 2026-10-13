@@ -90,7 +90,8 @@ def main():
     history.sort(key=lambda h: h["trade_date"], reverse=True)
     keys = ["code", "name", "sector", "sector_src", "avg_mcap", "avg_trdval", "n_days", "mcap_rank", "n_exist", "n_sector",
             "rank_ratio", "cum_share", "trd_rank", "liq_ok", "primary", "status", "mktcap_now", "listing_date", "mcap15", "note",
-            "is_cur", "cur_weight", "fif", "confidence", "conf_note", "ret_period", "risk", "price_as_of", "price_status", "universe_as_of"]
+            "is_cur", "cur_weight", "fif", "confidence", "conf_note", "ret_period", "risk", "price_as_of", "price_status", "universe_as_of",
+            "market_mcap_rank", "discretionary_action", "review_start", "review_end", "review_events", "mcap15_rank", "mcap15_n_days"]
     for k in ("kospi200", "kosdaq150"):
         a[k]["all"] = slim(a[k]["all"], keys)
         for f in ("adds", "dels", "watch_keep", "watch_new"):

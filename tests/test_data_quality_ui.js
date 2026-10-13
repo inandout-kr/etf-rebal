@@ -144,4 +144,67 @@ assert.match(vm.runInContext("priceInfo(A.stock_data['084180'])", ui.context), /
 vm.runInContext("A.data_quality.fx = {status:'fallback', source:'Naver FX_USDKRW', as_of:'2026-09-30T16:00:00+09:00'}; A.msci.availability='ready';", ui.context);
 ui.context.renderQuality();
 assert.match(ui.elements.get('data-quality').innerHTML, /이전 정상 환율 사용.*2026-09-30T16:00:00\+09:00.*Naver FX_USDKRW/);
-console.log('PASS: dashboard dedicated card removed; remaining KPIs/common data retained; tab entry/reload, ETF/flow access, date scope and FX unavailable UI');
+
+// KRX review assumptions must survive tab changes and distinguish discretionary outputs.
+const transition = {pending: true, forecast_basis: 'GICS', sector_count: 9,
+  effective_date: '2026-11-02', classification_expected_date: '2026-10-26',
+  sources: [{label: '공식 개정 안내', url: 'https://example.com/notice?a=1&b=2'}]};
+const methodology = {name: 'KOSDAQ 150', doc: '현재 GICS 방법론', doc_url: 'https://example.com/methodology',
+  universe: '코스닥 보통주', sector: 'GICS', selection: [], adhoc: [], regular: '6·12월',
+  notes: '관리종목·공식 유동비율 미수집', classification_transition: transition};
+const removed = {code: '352480', name: '씨앤씨<검증>', market_mcap_rank: 309,
+  status: '편출(소형주 제외)', note: '코스닥 전체 일평균시총 309위 > 300위 · 재량 제외',
+  is_cur: true, cur_weight: .1, avg_mcap: 4e11, avg_trdval: 1e9};
+const replacement = {code: '458870', name: '시어스', market_mcap_rank: 231,
+  status: '신규편입(소형주 대체)', note: '300위 초과 제외에 따른 유동성 충족 대체',
+  avg_mcap: 7e11, mktcap_now: 8e11, avg_trdval: 1e10};
+const reset = {code: '000880', name: '한화', status: '유지', is_cur: true,
+  avg_mcap: 7e12, mktcap_now: 8e12, review_start: '20260825', review_end: '20261012', n_days: 31,
+  review_events: [{type: 'split', effective_date: '20260825'}]};
+const review = {name: 'KOSDAQ 150', rules: '산업군 선정 규칙', n_universe: 151,
+  n_current: 150, all: [removed, replacement, reset], adds: [replacement], dels: [removed],
+  watch_keep: [], watch_new: [], sectors: {}, dropped_sectors: [], excluded_current: [],
+  window: {apply: '2026-12-11', ref_date: '20261030', period_start: '20260501', period_end: '20261030'},
+  smallcap_rule: {applied: true, discretionary: true, threshold_rank: 300,
+    base_adds: 0, base_dels: 0, removed: [removed], replacements: [replacement], unreplaced: []},
+  largecap_candidates: [{code: '000001', name: '특례 후보', mcap15_rank: 49, mcap15: 1e12}]};
+vm.runInContext(`A.tracking_aum={}; KB.kospi200=${JSON.stringify(methodology)};
+  KB.kosdaq150=${JSON.stringify(methodology)}; A.kosdaq150=${JSON.stringify(review)};`, ui.context);
+ui.context.renderQuality();
+const notice = ui.elements.get('krx-transition').innerHTML;
+assert.match(notice, /GICS 기준 참고 시나리오.*KRICS 전환 전/);
+assert.match(notice, /9개 산업군.*2026-11-02.*2026-10-26/);
+assert.match(notice, /아래 결과는 KRICS를 반영하지 않았습니다/);
+assert.match(notice, /KOSPI 100·코스피200 IT/);
+assert.match(notice, /href="https:\/\/example.com\/notice\?a=1&amp;b=2"/);
+ui.context.renderKrx('kosdaq150', ui.elements.get('tab-kq150'));
+const krx = ui.elements.get('tab-kq150').innerHTML;
+assert.match(krx, /GICS 참고 · KRICS 미반영/);
+assert.match(krx, /300위 초과 제외를 적용한 추정 시나리오/);
+assert.match(krx, /공식 확정 결과가 아닙니다/);
+assert.match(krx, /일반 선정 규칙: 편입 0 · 편출 0 → 재량 제외 적용: 편입 1 · 편출 1/);
+assert.match(krx, /씨앤씨&lt;검증&gt;.*309위/);
+assert.match(krx, /대체 선정:.*시어스.*231위/);
+assert.match(krx, /코스닥 보통주 전체의 심사기간 일평균시총 순위 기준/);
+assert.match(krx, /최근 15매매일 관측이 완료된 전체 심사대상 종목을 비교한 미선정 후보/);
+assert.match(krx, /미선정 후보 1종목.*자동 확정하지 않습니다.*특례 후보.*49위/);
+assert.match(krx, /계산 가정·한계.*공식 유동비율 미수집/);
+assert.match(ui.elements.get('kosdaq150-tables').innerHTML, /코스닥 전체 일평균시총 309위 &gt; 300위 · 재량 제외/);
+assert.match(ui.elements.get('kosdaq150-all').innerHTML, /data-sort="7000000000000">.*기업이벤트 반영.*2026-08-25~2026-10-12 · 31매매일 집계/);
+for (const key of ['kospi200', 'kosdaq150', 'kospi100', 'kospi200_it']) {
+  assert.match(ui.context.modelBadge({key}), /GICS 참고 · KRICS 미반영/);
+}
+assert.doesNotMatch(ui.context.modelBadge({key: 'fn_top10'}), /KRICS/);
+ui.context.renderDash();
+assert.match(ui.elements.get('tab-dash').innerHTML, /코스피 200.*GICS 참고 · KRICS 미반영/);
+assert.match(ui.elements.get('tab-dash').innerHTML, /코스닥 150.*GICS 참고 · KRICS 미반영/);
+for (const button of ui.buttons) button.click();
+assert.equal(ui.elements.get('krx-transition').innerHTML, notice);
+assert.equal(ui.context.krxScenarioNotice({}), '');
+assert.equal(ui.context.krxReviewInfo({review_events: []}), '');
+vm.runInContext("A.kospi200.classification={status:'current'}; A.kosdaq150.classification={status:'current'};", ui.context);
+assert.equal(ui.context.krxTransitionNotice(), '');
+assert.equal(ui.context.krxBasisBadge('kospi100'), '');
+vm.runInContext("A.kosdaq150.classification.status='reference_pending_krics'", ui.context);
+assert.match(ui.context.krxTransitionNotice(), /KRICS 전환 전/);
+console.log('PASS: dashboard/tabs/data quality retained; KRX discretionary scenario, review period, special candidates and shared KRICS transition notice');

@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "description": "공식 공시로 확인한 비소규모합병·기업분할·상장적격성 실질심사 장기정지 후 거래재개의 심사기간 재설정 목록. 날짜는 YYYYMMDD이며 published_date 이전의 계산에는 적용하지 않는다. 이 목록이 모든 기업이벤트를 포함하지는 않는다.",
+  "event_fields": {
+    "code": "종목코드 문자열",
+    "name": "공시 대상 종목명",
+    "type": "merger(소규모합병 제외), split 또는 trading_resumption(상장적격성 실질심사 장기정지 후 재개)",
+    "effective_date": "합병·분할에 따른 상장일 또는 해당 거래재개일(YYYYMMDD)",
+    "published_date": "근거 공시의 공개일(YYYYMMDD)",
+    "source_url": "날짜와 사유를 확인한 공식 공시 URL",
+    "note": "적용 근거와 확인 사항"
+  },
+  "events": [
+    {
+      "code": "000880",
+      "name": "한화",
+      "type": "split",
+      "effective_date": "20260825",
+      "published_date": "20260820",
+      "source_url": "https://kind.krx.co.kr/corpgeneral/stockissuelist.do?bzProcsNo=20260820000139&contnId=20260820000139&forward=searchStockIssueDetail&method=searchStockIssueDetail",
+      "note": "기업분할에 따른 변경상장일 2026-08-25부터 심사기간을 다시 계산한다(KOSPI200 방법론 6.3.2)."
+    }
+  ]
+}

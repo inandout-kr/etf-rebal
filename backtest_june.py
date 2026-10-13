@@ -10,7 +10,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from analyze import (period_stats, eligible, gics_sector, simulate, K200_SECTOR_ETF)
+from analyze import (period_stats, eligible, gics_sector, simulate, K200_SECTOR_ETF,
+                     adjust_review_periods, load_review_events, market_common_ranks, apply_small_cap_exclusion)
 
 sys.stdout.reconfigure(encoding="utf-8")
 DATA = Path(__file__).parent / "data"
@@ -28,7 +29,7 @@ POST_JUNE_REMOVED = {"kospi200": ["동양생명", "현대홈쇼핑", "더존비�
 WIN = {"period_start": "20251101", "period_end": "20260430", "ref_date": "20260430"}
 CFG = {
     "kospi200": dict(name="KOSPI 200", proxy="kospi200", market="KOSPI", N=200, cum=0.85, liq=0.85, keep_buf=1.10, new_buf=0.90),
-    "kosdaq150": dict(name="KOSDAQ 150", proxy="kosdaq150", market="KOSDAQ", N=150, cum=0.60, liq=0.80, keep_buf=1.20, new_buf=0.80, sector_min_share=0.01),
+    "kosdaq150": dict(name="KOSDAQ 150", proxy="kosdaq150", market="KOSDAQ", N=150, cum=0.60, liq=0.80, keep_buf=1.20, new_buf=0.80, sector_min_share=0.01, small_cap_exclusion=True),
 }
 
 
@@ -47,11 +48,13 @@ def main():
         for r in holdings.get(k, {}).get("rows", []):
             if r.get("code"):
                 sector_etf_map[r["code"]] = k
-    stats = period_stats(con, WIN["period_start"], WIN["period_end"])
+    market_stats = period_stats(con, WIN["period_start"], WIN["period_end"], WIN["ref_date"])
+    stats = adjust_review_periods(con, market_stats, WIN["period_start"], WIN["period_end"], WIN["ref_date"], load_review_events())
     cov = con.execute("SELECT substr(date,1,6) m, COUNT(DISTINCT code) FROM daily WHERE date BETWEEN ? AND ? GROUP BY 1", (WIN["period_start"], WIN["period_end"])).fetchall()
     print("데이터 커버리지(월별 종목수):", [(r[0], r[1]) for r in cov])
 
     for key, cfg in CFG.items():
+        market_ranks = market_common_ranks(stocks, stats, cfg["market"])
         off = OFFICIAL[key]
         cur_now = {r["code"] for r in holdings[cfg["proxy"]]["rows"] if r.get("code")}
         names_to_codes = lambda names: {by_name[n] for n in names if n in by_name}
@@ -78,13 +81,18 @@ def main():
                 if is_cur:
                     excluded.append((st["name"], "산업군 미분류"))
                 continue
-            univ.append({"code": code, "name": st["name"], "sector": sec, "avg_mcap": ps["avg_mcap"], "avg_trdval": ps["avg_trdval"], "is_cur": is_cur})
+            univ.append({"code": code, "name": st["name"], "sector": sec, "avg_mcap": ps["avg_mcap"], "avg_trdval": ps["avg_trdval"], "is_cur": is_cur,
+                         "market_mcap_rank": market_ranks.get(code)})
         selected, dropped = simulate(univ, pre, cfg["N"], cfg["cum"], cfg["liq"], cfg["keep_buf"], cfg["new_buf"],
                                      sector_min_share=cfg.get("sector_min_share"), min_sector_exist=3)
+        smallcap_rule = None
+        if cfg.get("small_cap_exclusion"):
+            selected, smallcap_rule = apply_small_cap_exclusion(univ, selected)
         pred_adds = {u["name"] for u in univ if u["code"] in selected and not u["is_cur"]}
         pred_dels = {u["name"] for u in univ if u["code"] not in selected and u["is_cur"]} | {n for n, _ in excluded}
         oa, od = set(off["adds"]), set(off["dels"])
         results[key] = {"name": cfg["name"], "review": "2026.06 (심사기준일 2026-04-30, 심사기간 2025-11~2026-04, KRX 5/22 공표)",
+                        "smallcap_rule": smallcap_rule,
                         "adds_hit": sorted(pred_adds & oa), "adds_fp": sorted(pred_adds - oa), "adds_miss": sorted(oa - pred_adds),
                         "dels_hit": sorted(pred_dels & od), "dels_fp": sorted(pred_dels - od), "dels_miss": sorted(od - pred_dels),
                         "n_official_adds": len(oa), "n_official_dels": len(od)}

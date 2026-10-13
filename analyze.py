@@ -11,6 +11,7 @@ import json
 import math
 import sqlite3
 import sys
+from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -36,13 +37,14 @@ K200_SECTOR_ETF = {
     "k200s_staples": None,    # 필수소비재 or 유틸리티
 }
 FIF = {}   # implied float ratio (main에서 채움)
-EXCLUDE_NAME_KW = ("스팩", "인프라", "선박투자", "맵스리얼티")   # SPAC·인프라·선박투자회사 (리츠는 접미사로 별도 판정)
+EXCLUDE_NAME_KW = ("스팩", "선박투자", "맵스리얼티")   # SPAC·선박투자회사 (리츠는 접미사로 별도 판정)
+INFRA_INVESTMENT_NAMES = {"맥쿼리인프라", "KB발해인프라"}   # 일반 사업회사의 '인프라' 상호와 구분
 # WICS 분류가 GICS 상식과 다른 개별 종목 수동 보정 (코드: 산업군)
 SECTOR_OVERRIDE = {}   # KRX 공식 GICS 사용 후 수동 보정 불필요 (WICS 폴백 전용)
 
 
 def is_excluded_name(nm):
-    return nm.endswith("리츠") or any(k in nm for k in EXCLUDE_NAME_KW)
+    return nm.endswith("리츠") or nm in INFRA_INVESTMENT_NAMES or any(k in nm for k in EXCLUDE_NAME_KW)
 
 
 def load():
@@ -55,21 +57,21 @@ def load():
     return con, stocks, meta, holdings, etfs
 
 
-def period_stats(con, start, end, as_of=None):
-    """심사대상기간 [start, end] 일평균 시가총액(종가×상장주식수)·일평균 거래대금"""
-    end = min(end, as_of or latest_completed_date(con))
+def _period_stats(con, start, end, code=None):
+    code_filter = " AND code=?" if code is not None else ""
+    params = (start, end, code) if code is not None else (start, end)
     rows = con.execute(
-        """WITH sessions AS (SELECT date FROM daily GROUP BY date HAVING MAX(trdval)>0)
+        f"""WITH sessions AS (SELECT date FROM daily GROUP BY date HAVING MAX(trdval)>0)
            SELECT code, COUNT(*) n, AVG(close*shares) avg_mcap, AVG(trdval) avg_trdval, MAX(date) last, MIN(date) first
            FROM daily WHERE date BETWEEN ? AND ? AND date IN (SELECT date FROM sessions)
-           AND close IS NOT NULL AND shares IS NOT NULL GROUP BY code""",
-        (start, end)).fetchall()
+           AND close IS NOT NULL AND shares IS NOT NULL{code_filter} GROUP BY code""",
+        params).fetchall()
     out = {r["code"]: {"n": r["n"], "avg_mcap": r["avg_mcap"], "avg_trdval": r["avg_trdval"], "last": r["last"], "first": r["first"]} for r in rows}
     ends = con.execute(
-        """WITH sessions AS (SELECT date FROM daily GROUP BY date HAVING MAX(trdval)>0)
+        f"""WITH sessions AS (SELECT date FROM daily GROUP BY date HAVING MAX(trdval)>0)
            SELECT d.code, d.date, d.close FROM daily d JOIN
-           (SELECT code, MIN(date) mn, MAX(date) mx FROM daily WHERE date BETWEEN ? AND ? AND date IN (SELECT date FROM sessions) GROUP BY code) g
-           ON g.code=d.code AND (d.date=g.mn OR d.date=g.mx)""", (start, end)).fetchall()
+           (SELECT code, MIN(date) mn, MAX(date) mx FROM daily WHERE date BETWEEN ? AND ? AND date IN (SELECT date FROM sessions){code_filter} GROUP BY code) g
+           ON g.code=d.code AND (d.date=g.mn OR d.date=g.mx)""", params).fetchall()
     px = {}
     for r in ends:
         px.setdefault(r["code"], {})[r["date"]] = r["close"]
@@ -77,6 +79,45 @@ def period_stats(con, start, end, as_of=None):
         p0, p1 = px.get(c, {}).get(st["first"]), px.get(c, {}).get(st["last"])
         st["ret_period"] = (p1 / p0 - 1) if (p0 and p1) else None
     return out
+
+
+def load_review_events():
+    """공식 공시로 확인한 심사기간 재설정 사유만 읽는다. 주식수 변동으로 추정하지 않는다."""
+    payload = json.loads((DATA / "krx_review_events.json").read_text(encoding="utf-8"))
+    if payload.get("schema_version") != 1:
+        raise ValueError("지원하지 않는 KRX 심사기간 이벤트 형식입니다.")
+    return payload["events"]
+
+
+def adjust_review_periods(con, stats, start, end, as_of, review_events):
+    """공시일과 효력일이 모두 관측 범위 안인 이벤트만 종목별 심사기간에 반영한다."""
+    end = min(end, as_of)
+    by_code = defaultdict(list)
+    for event in review_events:
+        if (event["type"] in ("merger", "split", "trading_resumption")
+                and event["published_date"] <= as_of
+                and start < event["effective_date"] <= end):
+            by_code[event["code"]].append(event)
+    adjusted = dict(stats)
+    for code, events in by_code.items():
+        events = sorted(events, key=lambda e: e["effective_date"])
+        replacement = _period_stats(con, events[-1]["effective_date"], end, code).get(code)
+        if replacement is None:
+            adjusted.pop(code, None)
+        else:
+            replacement["review_events"] = events
+            adjusted[code] = replacement
+    return adjusted
+
+
+def period_stats(con, start, end, as_of=None, review_events=None):
+    """심사기간 일평균 시총·거래대금. 이벤트는 명시한 호출에만 반영한다."""
+    as_of = as_of or latest_completed_date(con)
+    end = min(end, as_of)
+    stats = _period_stats(con, start, end)
+    if review_events:
+        stats = adjust_review_periods(con, stats, start, end, as_of, review_events)
+    return stats
 
 
 def implied_float(holdings, stocks, keys=("kospi200", "kosdaq150", "msci_korea")):
@@ -100,11 +141,22 @@ def implied_float(holdings, stocks, keys=("kospi200", "kosdaq150", "msci_korea")
     return out
 
 
+def recent_mcap_stats(con, ndays, as_of=None, code=None):
+    """전 시장의 최근 완료 매매일을 공유하여 종목별 평균시총을 계산한다."""
+    code_filter = " AND code=?" if code is not None else ""
+    params = (as_of or latest_completed_date(con), ndays)
+    if code is not None:
+        params += (code,)
+    rows = con.execute(
+        f"""WITH sessions AS (SELECT date FROM daily WHERE date<=? GROUP BY date
+             HAVING MAX(trdval)>0 ORDER BY date DESC LIMIT ?)
+           SELECT code, AVG(close*shares) avg_mcap, COUNT(*) n FROM daily
+           WHERE date IN (SELECT date FROM sessions) AND close*shares>0{code_filter} GROUP BY code""", params)
+    return {r[0]: {"avg_mcap": r[1], "n": r[2]} for r in rows}
+
+
 def recent_avg_mcap(con, code, ndays, as_of=None):
-    rows = con.execute("SELECT close*shares FROM daily WHERE code=? AND date<=? ORDER BY date DESC LIMIT ?",
-                       (code, as_of or latest_completed_date(con), ndays)).fetchall()
-    vals = [r[0] for r in rows if r[0]]
-    return (sum(vals) / len(vals)) if vals else None
+    return recent_mcap_stats(con, ndays, as_of, code).get(code, {}).get("avg_mcap")
 
 
 GICS_SEC_NM = {"10": "에너지", "15": "소재", "20": "산업재", "25": "자유소비재", "30": "필수소비재", "35": "헬스케어",
@@ -151,9 +203,11 @@ def eligible(st, ref_date, min_listing_months=6, is_cur=False):
         return False, "외국주권/DR"
     ld = st.get("listing_date")
     if ld and not is_cur:
-        ld = ld.replace("-", "")
-        cutoff = (datetime.strptime(ref_date, "%Y%m%d") - timedelta(days=int(30.5 * min_listing_months))).strftime("%Y%m%d")
-        if ld > cutoff:
+        listed = datetime.strptime(ld.replace("-", ""), "%Y%m%d").date()
+        month_index = listed.year * 12 + listed.month - 1 + min_listing_months
+        year, month = divmod(month_index, 12)
+        anniversary = date(year, month + 1, min(listed.day, monthrange(year, month + 1)[1]))
+        if anniversary.strftime("%Y%m%d") > ref_date:
             return False, f"신규상장 {min_listing_months}개월 미만"
     return True, None
 
@@ -226,11 +280,59 @@ def simulate(univ, current, N, cum_pct, liq_pct, keep_buf, new_buf, sector_min_s
     return selected, dropped_sectors
 
 
+def market_common_ranks(stocks, stats, market):
+    """정기심사 필터 전, 해당 시장의 현재 보통주 전체를 동일 기간 평균시총으로 정렬한다."""
+    codes = [c for c, st in stocks.items() if st["market"] == market and st["is_common"]
+             and st.get("universe_active", True) and stats.get(c, {}).get("avg_mcap")]
+    codes.sort(key=lambda c: (-stats[c]["avg_mcap"], c))
+    return {c: i + 1 for i, c in enumerate(codes)}
+
+
+def apply_small_cap_exclusion(univ, selected, max_rank=300):
+    """KOSDAQ150 6.4.5의 재량 제외를 적용하는 추정 시나리오. 대체할 종목이 있어야 교체한다."""
+    selected = set(selected)
+    base_rows = [u for u in univ if u["code"] in selected]
+    result = {"applied": True, "discretionary": True, "threshold_rank": max_rank,
+              "base_adds": sum(not u["is_cur"] for u in base_rows),
+              "base_dels": sum(u["is_cur"] and u["code"] not in selected for u in univ),
+              "base_n_selected": len(selected), "removed": [], "replacements": [], "unreplaced": []}
+    victims = sorted([u for u in base_rows if (u.get("market_mcap_rank") or 0) > max_rank],
+                     key=lambda u: (u["avg_mcap"], u["code"]))
+    candidates = sorted([u for u in univ if u["code"] not in selected and u.get("liq_ok")
+                         and u.get("status") != "산업군제외"
+                         and 0 < (u.get("market_mcap_rank") or 0) <= max_rank],
+                        key=lambda u: (-u["avg_mcap"], u["code"]))
+
+    def describe(u):
+        return {k: u.get(k) for k in ("code", "name", "market_mcap_rank", "note")}
+
+    for i, victim in enumerate(victims):
+        reason = f"코스닥 보통주 전체 평균시총 {victim['market_mcap_rank']}위 > {max_rank}위"
+        if i >= len(candidates):
+            victim["note"] = f"{reason}; 소형주 재량제외 대체 후보 부족으로 유지"
+            result["unreplaced"].append(describe(victim))
+            continue
+        replacement = candidates[i]
+        selected.remove(victim["code"])
+        selected.add(replacement["code"])
+        victim["status"] = "편출(소형주 재량제외)" if victim["is_cur"] else "미선정(소형주 재량제외)"
+        victim["discretionary_action"] = "small_cap_exclusion"
+        victim["note"] = f"{reason}; KRX 재량제외 적용 추정 → {replacement['name']} 대체"
+        replacement["status"] = "유지(소형주 재량대체)" if replacement["is_cur"] else "신규편입(소형주 재량대체)"
+        replacement["discretionary_action"] = "small_cap_replacement"
+        replacement["note"] = f"{victim['name']} 소형주 재량제외 적용 추정에 따른 유동성 충족 차순위 대체"
+        result["removed"].append(describe(victim))
+        result["replacements"].append(describe(replacement))
+    return selected, result
+
+
 def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, window=None):
     """KOSPI 200 / KOSDAQ 150 시뮬레이션"""
     win = window or next_cycle(key)
     as_of = as_of or latest_completed_date(con)
-    stats = period_stats(con, win["period_start"], win["period_end"], as_of)
+    market_stats = period_stats(con, win["period_start"], win["period_end"], as_of)
+    stats = adjust_review_periods(con, market_stats, win["period_start"], win["period_end"], as_of, load_review_events())
+    market_ranks = market_common_ranks(stocks, stats, cfg["market"])
     cur = {r["code"] for r in holdings[cfg["proxy"]]["rows"] if r.get("code")}
     curw = {r["code"]: r.get("weight") for r in holdings[cfg["proxy"]]["rows"] if r.get("code")}
     univ = []
@@ -254,18 +356,26 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, w
             continue
         univ.append({"code": code, "name": st["name"], "sector": sec, "sector_src": src, "avg_mcap": ps["avg_mcap"],
                      "avg_trdval": ps["avg_trdval"], "n_days": ps["n"], "is_cur": is_cur, "cur_weight": curw.get(code),
+                      "review_start": ps["first"], "review_end": ps["last"], "review_events": ps.get("review_events", []),
+                      "market_mcap_rank": market_ranks.get(code),
                       "mktcap_now": st["mktcap"], "close": st["close"], "listing_date": st.get("listing_date"),
                       "price_as_of": st.get("price_as_of"), "price_status": st.get("price_status"), "universe_as_of": st.get("universe_as_of"),
                      "fif": FIF.get(code), "ret_period": ps.get("ret_period"),
                      "risk": ("급등(부적합 판정 위험)" if (ps.get("ret_period") or 0) >= 1.5 else None)})
     selected, dropped = simulate(univ, cur, cfg["N"], cfg["cum"], cfg["liq"], cfg["keep_buf"], cfg["new_buf"],
                                  sector_min_share=cfg.get("sector_min_share"), min_sector_exist=3)
-    # 대형주 특례 후보 (최근 15매매일 평균시총 상위 50위)
+    smallcap_rule = None
+    if cfg.get("small_cap_exclusion", key == "kosdaq150"):
+        selected, smallcap_rule = apply_small_cap_exclusion(univ, selected)
+    # 대형주 특례는 자동 편입하지 않고 전체 심사대상 최근 15매매일 순위로 후보를 표시한다.
+    recent = recent_mcap_stats(con, 15, as_of)
     for u in univ:
-        u["mcap15"] = None
-    top50 = sorted(univ, key=lambda u: -(u["mktcap_now"] or 0))[:50]
-    for u in top50:
-        u["mcap15"] = recent_avg_mcap(con, u["code"], 15, as_of)
+        u["mcap15"] = recent.get(u["code"], {}).get("avg_mcap")
+        u["mcap15_n_days"] = recent.get(u["code"], {}).get("n", 0)
+    ranked_recent = sorted([u for u in univ if u["mcap15"] and u["mcap15_n_days"] == 15],
+                           key=lambda u: (-u["mcap15"], u["code"]))
+    for i, u in enumerate(ranked_recent):
+        u["mcap15_rank"] = i + 1
     adds = sorted([u for u in univ if u["code"] in selected and not u["is_cur"]], key=lambda u: -u["avg_mcap"])
     dels = sorted([u for u in univ if u["code"] not in selected and u["is_cur"]], key=lambda u: u["avg_mcap"])
     # 확신도: 임계값(버퍼·누적시총·유동성)까지의 여유. 경계(±1순위 이내)는 '低'
@@ -288,6 +398,9 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, w
         else:
             u["confidence"] = "高" if over >= 3 else ("中" if over >= 1.5 else "低")
             u["conf_note"] = f"유지버퍼 초과 {over:.1f}위"
+    for u in adds + dels:
+        if u.get("discretionary_action"):
+            u["confidence"], u["conf_note"] = "低", "소형주 재량제외 적용 추정(거래소 확정 아님)"
     # 경계 종목: 기존 - rank_ratio 0.95~1.3 / 신규 - primary & rank_ratio 0.7~1.0 or cum 0.8~0.9
     watch_keep = sorted([u for u in univ if u["is_cur"] and u["code"] in selected and u.get("rank_ratio") and u["rank_ratio"] >= 0.9],
                         key=lambda u: -u["rank_ratio"])
@@ -303,7 +416,8 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, w
         s["mcap"] += u["avg_mcap"]
     fields = ["code", "name", "sector", "sector_src", "avg_mcap", "avg_trdval", "n_days", "mcap_rank", "n_exist", "n_sector",
               "rank_ratio", "cum_share", "trd_rank", "liq_ok", "primary", "status", "mktcap_now", "close", "listing_date", "mcap15", "note",
-              "is_cur", "cur_weight", "fif", "confidence", "conf_note", "ret_period", "risk", "price_as_of", "price_status", "universe_as_of"]
+              "is_cur", "cur_weight", "fif", "confidence", "conf_note", "ret_period", "risk", "price_as_of", "price_status", "universe_as_of",
+              "review_start", "review_end", "review_events", "market_mcap_rank", "mcap15_rank", "mcap15_n_days", "discretionary_action"]
 
     def pick(u):
         return {k: u.get(k) for k in fields}
@@ -313,6 +427,11 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, w
         "window": win, "data_through": max((s["last"] for s in stats.values()), default=None),
         "n_universe": len(univ), "n_current": len(cur), "n_selected": len(selected),
         "rules": cfg["rules"],
+        "classification": ({"scheme": "GICS", "status": "reference_pending_krics", "expected_scheme": "KRICS",
+                            "expected_effective": "2026-11-02", "mapping_publication_expected": "2026-10-26"}
+                           if win.get("apply", "") >= "2026-11-02" else {"scheme": "GICS", "status": "current"}),
+        "smallcap_rule": smallcap_rule,
+        "largecap_candidates": [pick(u) for u in ranked_recent[:50] if u["code"] not in selected],
         "adds": [pick(u) for u in adds], "dels": [pick(u) for u in dels],
         "watch_keep": [pick(u) for u in watch_keep], "watch_new": [pick(u) for u in watch_new],
         "excluded_current": excluded, "dropped_sectors": dropped,
@@ -560,8 +679,8 @@ def main():
     cfg_k200 = dict(name="KOSPI 200", proxy="kospi200", market="KOSPI", N=200, cum=0.85, liq=0.85, keep_buf=1.10, new_buf=0.90,
                     rules="산업군(GICS 참고 10개)별 일평균시총 누적 85% & 거래대금 순위 산업군 심사대상 85% 이내 → 기존 110%/신규 90% 버퍼 → 200종목 조정")
     cfg_kq150 = dict(name="KOSDAQ 150", proxy="kosdaq150", market="KOSDAQ", N=150, cum=0.60, liq=0.80, keep_buf=1.20, new_buf=0.80,
-                     sector_min_share=0.01,
-                     rules="산업군(GICS 참고 11개, 시총 1% 미만 산업군 제외)별 누적 60% & 거래대금 순위 80% 이내 → 기존 120%/신규 80% 버퍼 → 150종목 조정 (소형주 300위 초과 제외 가능)")
+                     sector_min_share=0.01, small_cap_exclusion=True,
+                     rules="산업군(GICS 참고 11개, 시총 1% 미만 산업군 제외)별 누적 60% & 거래대금 순위 80% 이내 → 기존 120%/신규 80% 버퍼 → 150종목 조정 → 소형주 300위 초과 재량제외 적용 추정")
     k200 = run_krx_index(con, stocks, holdings, "kospi200", cfg_k200, sector_etf_map, as_of, windows["kospi200"])
     kq150 = run_krx_index(con, stocks, holdings, "kosdaq150", cfg_kq150, {}, as_of, windows["kosdaq150"])
     k100 = run_kospi100_50(k200, holdings)

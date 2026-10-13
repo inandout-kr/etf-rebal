@@ -129,6 +129,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:26px 16px}
   </nav>
 </div>
 <main>
+  <div id="krx-transition"></div>
   <div id="data-quality"></div>
   <p class="sort-help">표의 열 제목을 클릭하면 오름차순 ↑ · 내림차순 ↓으로 정렬됩니다. 종목명을 누르면 상세를 확인할 수 있습니다.</p>
   <section class="tab on" id="tab-dash"></section>
@@ -258,6 +259,7 @@ function eventBadge(e){
   return `<span class="badge ${confirmed?'ok':'ghost'}">${confirmed?'공식 일정':'예상 일정'}</span>`;
 }
 function modelBadge(event){
+  if(krxBasisBadge(event?.key)) return krxBasisBadge(event.key);
   if(event?.availability==='pending_review') return '<span class="badge warn">구성 유지 가정 · 비중 조정만</span>';
   const assumed=/불변|유지 가정|현 구성|변경 없음 가정/.test(event?.target_src||'');
   return `<span class="badge ${assumed?'warn':'acc'}">${assumed?'구성종목 유지 가정':'규칙 기반 예상'}</span>`;
@@ -275,6 +277,7 @@ function renderChanges(){
   return `<div class="card change-card"><div class="hd"><div><div class="eyebrow">일별 변화</div><h2>오늘 달라진 것</h2><p class="sub">거래완료일 ${fmt.date(c.baseline_date)} → ${fmt.date(c.current_date)} 기준 · 규칙 기반 예상의 변화</p></div></div><div class="change-summary"><span class="badge up">새 편입 후보 ${fresh.length}</span><span class="badge dn">후보 제외 ${removed.length}</span><span class="badge acc">예상 수급 변화 ${flows.length}종목</span></div><div class="grid g2"><div><h3>후보 변화</h3>${adds.length?`<ul class="list">${adds.slice(0,8).map(x=>`<li><span>${stockLink(x.name,x.code)} <span class="m">${esc(x.index)}</span></span><span class="badge ${x.change==='new'?'up':'dn'}">${x.change==='new'?'새 후보':'후보 제외'}</span></li>`).join('')}</ul>${adds.length>8?`<p class="muted xs">외 ${adds.length-8}건</p>`:''}`:'<p class="change-empty">편입 후보의 변화가 없습니다.</p>'}</div><div><h3>예상 수급 변화 상위</h3>${top.length?`<div class="tbl short"><table><thead><tr><th class="l">종목</th><th>이전</th><th>현재</th><th>변화</th></tr></thead><tbody>${top.map(x=>`<tr><td>${stockLink(x.name,x.code)}</td><td ${sortAttr(x.before)}>${fmt.signed(x.before)}</td><td ${sortAttr(x.after)}>${fmt.signed(x.after)}</td><td ${sortAttr(x.delta)} class="${cls(x.delta)}"><b>${fmt.signed(x.delta)}</b></td></tr>`).join('')}</tbody></table></div>`:'<p class="change-empty">예상 수급의 변화가 없습니다.</p>'}</div></div></div>`;
 }
 function renderQuality(){
+  $('#krx-transition').innerHTML=krxTransitionNotice();
   const q=A.data_quality;
   if(!q){$('#data-quality').innerHTML='<div class="quality warning"><span class="badge warn">품질 정보 대기</span>수집 상태 기록이 없는 데이터입니다. 아래 생성일과 시세 기준일을 확인해 주세요.</div>';return;}
   const warnings=q.warnings||[], fx=q.fx||{}, universe=q.universe||{};
@@ -319,8 +322,8 @@ function renderDash(){
   $('#tab-dash').innerHTML = `
   <div class="grid g4 dashboard-kpis">
     <div class="card kpi"><div class="eyebrow">다음 이벤트</div><div class="v">${next?`D-${next.dday}`:"—"}</div><div class="s"><b>${esc(next?.index||"예정 일정 없음")}</b><br>${esc(next?.event||"")}</div><div class="l">${esc(next?.date||"")} ${next?eventBadge(next):""}</div></div>
-    <div class="card kpi"><div class="eyebrow">코스피 200 · ${fmt.md(k.window.apply)} 적용</div><div class="v"><span class="pos">${k.adds.length} IN</span> <span class="muted" style="font-size:16px">/</span> <span class="neg">${k.dels.length} OUT</span></div><div class="s">현재 프록시 ${k.n_current} → 예상 ${k.n_current+k.adds.length-k.dels.length}종목 (목표 200)</div><div class="l">규칙 기반 정기변경 예상 · 심사 ${fmt.md(fmt.date(k.window.period_start))}~${fmt.md(fmt.date(k.window.period_end))} 중 ${fmt.md(fmt.date(k.data_through))}까지 집계</div></div>
-    <div class="card kpi"><div class="eyebrow">코스닥 150 · ${fmt.md(q.window.apply)} 적용</div><div class="v"><span class="pos">${q.adds.length} IN</span> <span class="muted" style="font-size:16px">/</span> <span class="neg">${q.dels.length} OUT</span></div><div class="l">규칙 기반 정기변경 예상</div></div>
+    <div class="card kpi"><div class="eyebrow">코스피 200 · ${fmt.md(k.window.apply)} 적용</div>${krxBasisBadge("kospi200")}<div class="v"><span class="pos">${k.adds.length} IN</span> <span class="muted" style="font-size:16px">/</span> <span class="neg">${k.dels.length} OUT</span></div><div class="s">현재 프록시 ${k.n_current} → 예상 ${k.n_current+k.adds.length-k.dels.length}종목 (목표 200)</div><div class="l">규칙 기반 정기변경 예상 · 심사 ${fmt.md(fmt.date(k.window.period_start))}~${fmt.md(fmt.date(k.window.period_end))} 중 ${fmt.md(fmt.date(k.data_through))}까지 집계</div></div>
+    <div class="card kpi"><div class="eyebrow">코스닥 150 · ${fmt.md(q.window.apply)} 적용</div>${krxBasisBadge("kosdaq150")}<div class="v"><span class="pos">${q.adds.length} IN</span> <span class="muted" style="font-size:16px">/</span> <span class="neg">${q.dels.length} OUT</span></div><div class="l">규칙 기반 정기변경 예상</div></div>
   </div>
   ${renderChanges()}
   <div class="grid g2" style="margin-top:14px">
@@ -436,14 +439,37 @@ function renderFlows(){
 }
 
 /* ---------- KRX 대표지수 (K200 / KQ150) ---------- */
+function krxBasisBadge(key){
+  const parent={kospi100:'kospi200',kospi200_it:'kospi200'}[key]||key;
+  const classification=A[parent]?.classification;
+  const pending=classification?classification.status==='reference_pending_krics':KB[parent]?.classification_transition?.pending;
+  return pending?'<span class="badge warn">GICS 참고 · KRICS 미반영</span>':'';
+}
+function krxTransitionNotice(){
+  const transition=KB.kospi200?.classification_transition||KB.kosdaq150?.classification_transition;
+  if(!transition?.pending||!['kospi200','kosdaq150'].some(key=>krxBasisBadge(key))) return '';
+  return `<div class="callout" role="status"><b>KOSPI 200·KOSDAQ 150: GICS 기준 참고 시나리오 · KRICS 전환 전</b><br>KRICS ${fmt.n(transition.sector_count)}개 산업군 적용 예정 ${esc(transition.effective_date)}. 종목별 분류 공표 예정 ${esc(transition.classification_expected_date)} 이후 공식 분류·개정 방법론으로 재산정이 필요합니다. 아래 결과는 KRICS를 반영하지 않았습니다. 관련 수급과 KOSPI 100·코스피200 IT도 같은 제한이 적용됩니다.<br>${(transition.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)} →</a>`).join(' · ')}</div>`;
+}
+function krxScenarioNotice(idx){
+  const rule=idx.smallcap_rule;
+  if(!rule?.applied) return '';
+  const names=rows=>(rows||[]).map(u=>`${stockLink(u.name,u.code)} (${fmt.n(u.market_mcap_rank)}위)`).join(', ')||'없음';
+  return `<div class="callout"><b>${fmt.n(rule.threshold_rank)}위 초과 제외를 적용한 추정 시나리오</b><br>코스닥 보통주 전체의 심사기간 일평균시총 순위 기준입니다. 거래소가 적용 여부를 판단하는 재량 조항으로, 공식 확정 결과가 아닙니다.<br>일반 선정 규칙: 편입 ${fmt.n(rule.base_adds)} · 편출 ${fmt.n(rule.base_dels)} → 재량 제외 적용: 편입 ${idx.adds.length} · 편출 ${idx.dels.length}<br>추가 제외: ${names(rule.removed)}<br>대체 선정: ${names(rule.replacements)}${rule.unreplaced?.length?`<br><b>유동성 충족 대체 후보 부족: ${rule.unreplaced.length}종목</b>`:''}</div>`;
+}
+function krxReviewInfo(u){
+  if(!u.review_events?.length) return '';
+  return `<div class="muted xs">기업이벤트 반영<br>${fmt.date(u.review_start)}~${fmt.date(u.review_end)} · ${fmt.n(u.n_days)}매매일 집계</div>`;
+}
 function renderKrx(key, mount){
   const idx = A[key]; const aumDef = Math.round((A.tracking_aum[key]?.total_eok||0)/1000)/10;
   const kb = KB[key];
   mount.innerHTML = `
-  <div class="card"><div class="hd"><div><div class="eyebrow">규칙 기반 예상 · ${fmt.md(idx.window.apply)} 적용</div><h2>${esc(idx.name)} 시뮬레이션</h2>
+  <div class="card"><div class="hd"><div><div class="eyebrow">규칙 기반 예상 · ${fmt.md(idx.window.apply)} 적용 ${krxBasisBadge(key)}</div><h2>${esc(idx.name)} 시뮬레이션</h2>
       <p class="sub">심사기준일 <b>${fmt.date(idx.window.ref_date)}</b> · 심사기간 ${fmt.date(idx.window.period_start)}~${fmt.date(idx.window.period_end)} 중 <b>${fmt.date(idx.data_through)}까지 집계</b> · 적용 <b>${idx.window.apply}</b> (선물만기 ${idx.window.expiry} 익영업일) · 결과 공표 예상 ${esc(idx.window.announce)} · 현 구성 ${idx.n_current} · 심사대상 ${idx.n_universe}</p></div>
       <div class="r"><label class="small muted">추종자금(조원)</label><input type="number" id="${key}-aum" value="${aumDef}" step="0.5" style="width:90px"></div></div>
+    ${krxScenarioNotice(idx)}
     <div id="${key}-tables"></div>
+    ${Array.isArray(idx.largecap_candidates)?note('대형주 특례 후보 · 최근 15매매일 평균시총 상위 50위', `최근 15매매일 관측이 완료된 전체 심사대상 종목을 비교한 미선정 후보 ${idx.largecap_candidates.length}종목입니다. 특례 편입은 자동 확정하지 않습니다.${idx.largecap_candidates.length?`<ul>${idx.largecap_candidates.map(u=>`<li>${nm(u.name,u.code)} · ${fmt.n(u.mcap15_rank)}위 · 15매매일 평균 ${fmt.eok(u.mcap15)}</li>`).join('')}</ul>`:''}`):''}
     ${note('규칙·추종자금 가정', `${esc(idx.rules)}.<br><b>산업군</b>: KRX 인덱스 사이트의 공식 GICS 산업분류(산업별 종목현황) 사용, 미분류 종목만 섹터 ETF·WICS로 보완.<br><b>확신도</b>: 高 = 버퍼·누적시총 기준까지 3순위 이상 여유, 中 = 1.5~3순위, 低 = 경계(1.5순위 이내)·3차 충원·급등 종목. <b>급등</b> = 심사기간 수익률 +150% 이상(가격 변동 위험을 별도 표시하며 실제 심사 결과를 뜻하지 않음).<br><b>추종자금</b>: 입력값 × 예상 비중 = 패시브 매수/매도 추정액. 기본값은 해당 지수 추종 국내 ETF 순자산 합계 ${fmt.eokv(A.tracking_aum[key]?.total_eok)} (${A.tracking_aum[key]?.etfs.length}개, 레버리지·커버드콜 포함)이며 연기금·인덱스펀드는 제외이므로 실제 총 추종자금은 이보다 큽니다. 유동비율은 추정 FIF(중앙값 대체) 적용.`)}
   </div>
   ${backtestCard(key)}
@@ -455,7 +481,7 @@ function renderKrx(key, mount){
     <div class="card"><div class="eyebrow">산업군</div><h2>산업군별 현황</h2><div class="tbl short"><table><thead><tr><th class="l">산업군</th><th>심사대상</th><th>현 구성</th><th>선정</th><th>일평균시총 합</th></tr></thead><tbody>${Object.entries(idx.sectors).map(([s,v])=>`<tr><td class="l">${esc(s)}</td><td>${v.n_univ}</td><td>${v.n_exist}</td><td><b>${v.n_sel}</b></td><td ${sortAttr(v.mcap)}>${fmt.eok(v.mcap)}</td></tr>`).join('')}</tbody></table></div>
       ${idx.dropped_sectors.length?`<p class="small muted" style="margin:8px 0 0">산업군 시총 1% 미만으로 심사 제외: ${idx.dropped_sectors.join(', ')}</p>`:''}
       ${idx.excluded_current.length?`<p class="small muted" style="margin:8px 0 0">현 구성종목 중 심사대상 제외: ${idx.excluded_current.map(x=>`${esc(x.name)}(${esc(x.why)})`).join(', ')}</p>`:''}</div>
-    <div class="card"><div class="eyebrow">방법론</div><h2>${esc(kb.name)} 선정 규칙</h2><p class="sub">${esc(kb.doc)} · <a href="${kb.doc_url}" target="_blank" rel="noopener">원문 →</a></p><dl class="kb"><dt>심사대상</dt><dd>${esc(kb.universe)}</dd><dt>산업군</dt><dd>${esc(kb.sector)}</dd><dt>선정</dt><dd><ul>${kb.selection.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></dd><dt>정기변경</dt><dd>${esc(kb.regular)}</dd><dt>수시변경</dt><dd><ul>${kb.adhoc.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></dd></dl></div>
+    <div class="card"><div class="eyebrow">방법론</div><h2>${esc(kb.name)} 선정 규칙</h2><p class="sub">${esc(kb.doc)} · <a href="${kb.doc_url}" target="_blank" rel="noopener">원문 →</a></p><dl class="kb"><dt>심사대상</dt><dd>${esc(kb.universe)}</dd><dt>산업군</dt><dd>${esc(kb.sector)}</dd><dt>선정</dt><dd><ul>${kb.selection.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></dd><dt>정기변경</dt><dd>${esc(kb.regular)}</dd><dt>수시변경</dt><dd><ul>${kb.adhoc.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></dd>${kb.notes?`<dt>계산 가정·한계</dt><dd>${esc(kb.notes)}</dd>`:''}</dl></div>
   </div>
   <div class="card" style="margin-top:14px"><div class="hd"><div><div class="eyebrow">전체</div><h2>심사대상 종목 (${idx.all.length})</h2></div><div class="r"><input type="text" id="${key}-q" placeholder="종목명·코드·산업군"><div class="seg" id="${key}-f"><button data-v="" class="on">전체</button><button data-v="cur">현 구성</button><button data-v="new">비구성</button></div></div></div><div class="tbl" id="${key}-all"></div></div>`;
   const drawMain = ()=>{
@@ -486,10 +512,10 @@ function krxTable(rows, fm, isAdd){
   const flowCol = fm? `<th>예상비중</th><th>패시브 ${isAdd?'매수':'매도'}</th><th>ADV</th>`:'';
   const confCol = fm? `<th class="l">확신도</th>`:'';
   const confBadge = u => u.confidence? `<span class="badge ${u.confidence==='高'?'ok':u.confidence==='中'?'acc':'warn'}" title="${esc(u.conf_note||'')}">${u.confidence}</span>${u.risk?` <span class="badge warn" title="심사기간 수익률 ${fmt.pct(u.ret_period,0)}">급등</span>`:''}<div class="muted xs">${esc(u.conf_note||'')}</div>` : '';
-  return `<table><thead><tr><th class="l">종목</th><th class="l">산업군</th><th>일평균시총</th><th>거래대금</th><th>순위/기존</th><th>순위비율</th><th>누적</th><th>유동성</th><th class="l">상태</th>${confCol}${flowCol}<th>현비중</th></tr></thead><tbody>${rows.map(u=>{
+  return `<table><thead><tr><th class="l">종목</th><th class="l">산업군</th><th>일평균시총</th><th>거래대금</th><th>산업군 순위/기존</th><th>순위비율</th><th>누적</th><th>유동성</th><th class="l">상태</th>${confCol}${flowCol}<th>현비중</th></tr></thead><tbody>${rows.map(u=>{
     let fc='';
     if(fm){ const flow = isAdd? fm.flowAdd(u) : fm.flowDel(u); const w = isAdd? fm.weight(u) : fm.weightDel(u); const adv = fm.advDays(flow,u); fc=`<td class="l" ${sortAttr(({"低":1,"中":2,"高":3})[u.confidence])}>${confBadge(u)}</td><td ${sortAttr(w)}>${fmt.pct(w,2)}</td><td class="${isAdd?'pos':'neg'}" ${sortAttr(flow)}><b>${fmt.eokv(flow)}</b></td><td ${sortAttr(adv)}>${adv==null?'-':adv.toFixed(1)+'일'}</td>`; }
-    return `<tr><td class="l">${nm(u.name,u.code)}</td><td class="l">${esc(u.sector||'')}${u.sector_src==='KRX GICS'?'':u.sector_src==='WICS'?'<span class="code">WICS</span>':u.sector_src?'<span class="code">'+esc(u.sector_src)+'</span>':''}</td><td ${sortAttr(u.avg_mcap)}>${fmt.eok(u.avg_mcap)}</td><td ${sortAttr(u.avg_trdval)}>${fmt.eok(u.avg_trdval)}</td><td ${sortAttr(u.mcap_rank)}>${u.mcap_rank??'-'}/${u.n_exist??'-'}</td><td class="${u.rank_ratio>1?'neg':''}" ${sortAttr(u.rank_ratio)}>${fmt.pct(u.rank_ratio,0)}</td><td ${sortAttr(u.cum_share)}>${fmt.pct(u.cum_share,1)}</td><td ${sortAttr(u.liq_ok===false?0:u.liq_ok?1:null)}>${u.liq_ok===false?'<span class="badge dn">미달</span>':u.liq_ok?'<span class="badge ok">충족</span>':'-'}</td><td class="l" ${sortAttr(u.status)}>${statusBadge(u.status)}${u.risk&&!fm?` <span class="badge warn">급등</span>`:''}${u.note?`<div class="muted xs">${esc(u.note)}</div>`:''}</td>${fc}<td ${sortAttr(u.cur_weight)}>${u.cur_weight!=null?u.cur_weight+'%':'-'}</td></tr>`;}).join('')}</tbody></table>`;
+    return `<tr><td class="l">${nm(u.name,u.code)}</td><td class="l">${esc(u.sector||'')}${u.sector_src==='KRX GICS'?'':u.sector_src==='WICS'?'<span class="code">WICS</span>':u.sector_src?'<span class="code">'+esc(u.sector_src)+'</span>':''}</td><td ${sortAttr(u.avg_mcap)}>${fmt.eok(u.avg_mcap)}${krxReviewInfo(u)}</td><td ${sortAttr(u.avg_trdval)}>${fmt.eok(u.avg_trdval)}</td><td ${sortAttr(u.mcap_rank)}>${u.mcap_rank??'-'}/${u.n_exist??'-'}</td><td class="${u.rank_ratio>1?'neg':''}" ${sortAttr(u.rank_ratio)}>${fmt.pct(u.rank_ratio,0)}</td><td ${sortAttr(u.cum_share)}>${fmt.pct(u.cum_share,1)}</td><td ${sortAttr(u.liq_ok===false?0:u.liq_ok?1:null)}>${u.liq_ok===false?'<span class="badge dn">미달</span>':u.liq_ok?'<span class="badge ok">충족</span>':'-'}</td><td class="l" ${sortAttr(u.status)}>${statusBadge(u.status)}${u.risk&&!fm?` <span class="badge warn">급등</span>`:''}${u.note?`<div class="muted xs">${esc(u.note)}</div>`:''}</td>${fc}<td ${sortAttr(u.cur_weight)}>${u.cur_weight!=null?u.cur_weight+'%':'-'}</td></tr>`;}).join('')}</tbody></table>`;
 }
 
 /* ---------- KOSPI100 / TOP / 테마 ---------- */
