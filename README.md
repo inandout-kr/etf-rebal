@@ -6,6 +6,8 @@
 - 사이트: https://inandout-kr.github.io/etf-rebal/
 - 방법론 원문: `docs/methodology/` (KRX 지수산출방법 게시 PDF, FnGuide Methodology Book, MSCI GIMI)
 
+기존 GICS 결과와 같은 시장 입력에 KRICS 분류만 적용한 A/B 민감도를 나란히 제공합니다. 공식 미확인 분류·FFR·CAP·시행일은 HOLD로 유지하며, 비교 결과를 거래소의 확정 편출입으로 표시하지 않습니다. 수급 입력 형식은 [입력 계약](docs/flow_input_contract.md)을 참고합니다.
+
 ## 구성
 
 | 파일 | 역할 |
@@ -22,19 +24,35 @@
 | `build_site.py` + `template.html` | 정적 페이지 빌드 → `dist/` |
 | `update.ps1` / `deploy_github.ps1` | 일일 갱신·gh-pages 배포 |
 
-## 실행
+## 갱신과 배포
 
 ```powershell
-.\update.ps1            # 수집 → 분석 → 빌드 → 배포
-.\update.ps1 -NoDeploy  # 로컬 빌드만
+.\update.ps1            # 기존 수집·분석·빌드·배포 경로
+.\update.ps1 -NoDeploy  # 배포 제외
 ```
 
-Windows 예약 작업 `ETF-Rebal-Daily`는 매일 08:10에 `powershell.exe`로 `run_daily.ps1`을 실행합니다. 실행 내역과 오류는 `update.log`에 기록됩니다. Windows PowerShell 5.1에서 한글 인수를 올바르게 읽도록 `.ps1` 파일은 UTF-8 BOM 인코딩을 유지해야 합니다. 예약 작업 호환성은 `python -B -m unittest discover -s tests -p "test_scheduler.py"`로 실제 Windows PowerShell에서 검사합니다.
+KRICS 비교 입력은 2026-10-23 기준의 고정 자료입니다. 이후 시세 기준일이 달라지면 KRICS 비교는 HOLD로 남고 기존 GICS 계산은 계속됩니다. 새 분류표는 출처·기준일·전체 행 검증 후 교체해야 합니다.
+
+## 검증
+
+```powershell
+python -B -m unittest discover -s tests -p "test_*.py"
+node tests/test_revision_ui.js
+node tests/test_table_sort.js
+```
+
+예약작업 테스트는 임시 fixture와 배포 stub을 사용합니다. 실제 예약 실행이나 네트워크 배포를 호출하지 않습니다.
+
+HOLD인 수급은 0원이나 빈 예측으로 히스토리에 저장하지 않습니다. 일별 수급 변화도 양쪽의 계산 가능한 이벤트와 HOLD 범위가 같고 값이 알려진 경우에만 비교합니다.
 
 ## 주요 가정·한계
 
-- **현재 KOSPI 200·KOSDAQ 150 예측은 현행 GICS 산업분류와 선정 기준으로 계산합니다.** KRICS는 종목별 공식 분류 확인 전까지 접을 수 있는 참고사항으로 안내하며 계산에는 반영하지 않습니다. KRICS 9개 산업군 방법론 적용 예정일은 2026-11-02, 종목별 분류 공표 예정일은 10월 26일입니다. 공식 분류·개정 방법론 확인 후 관련 수급과 KOSPI 100·코스피200 IT를 포함해 재검토해야 합니다. 개정 안내: [DB자산운용](https://db-asset.com/mob/kr/customer/notice/9920), [삼성증권](https://www.samsungsecurities.co.kr/kor/invest/announce_view.do?create_date=20261002&create_time=130443&seq_no=100828).
-- 산업군은 KRX 인덱스 사이트가 공개하는 공식 GICS 산업분류를 사용합니다(미분류 종목만 섹터 ETF·WICS로 보완). 과거 정기변경 재현 성적은 `data/backtest_june.json`에서 계산해 화면에 표시합니다. 현재 분류·구성종목에서 과거 상태를 역산하므로 당시 정보를 그대로 동결한 사전 예측 검증과는 차이가 있으며, 오차 원인을 정성 판단만으로 단정하지 않습니다.
+- KOSPI 200·KOSDAQ 150은 같은 동결 심사자료에서 **기존 GICS 기준 / KRICS-A / KRICS-B의 세 결과**를 비교합니다. KRICS-A는1차선정 통과 AND 신규 순위 버퍼, KRICS-B는1차선정과 별개로 유동성 충족 AND 신규 순위 버퍼를 적용하는 해석 민감도입니다. 개정방법론 본문 시행일이 없어 `effective_date_status=HOLD`이며, 계산이 가능하다는 `ready`와 시행일 확인은 별개입니다. 입력 검증이 부족한 지수는 계산도 HOLD로 남기고 임의 분류로 채우지 않습니다.
+- 기존 기준은 GICS 분류(미분류 종목에 기존 섹터 ETF·WICS 보완)를 사용하고, KRICS-A·B는 모두 사용자가 정리해 공유한 같은 KRICS 매핑을 사용합니다. KOSPI 826개와 KOSDAQ 1,733개의 사용자 제공 분류표 추출본을 사용합니다. 원본 통합문서는 공개하지 않으며, 출처·누락·중복·코드·9개 산업군·기준일 검증이 필요합니다. 지수 선정 결과는 KRX 공식 공표가 아닙니다.
+- 공유 개정방법론의 KOSPI 200·KOSDAQ 150·KOSPI 100/50은 예비종목 별도 선정과 일반 수시 예비 자동충원을 하지 않으며, 신규상장 특례 편입 때 기존 최소종목을 자동제외하지 않습니다. **정기심사 대형주 특례(대표지수 6.4.4)의 최소종목 제외는 유지**합니다. 비구성법인에 피흡수합병되면 합병법인으로 교체하고, 구성간 흡수합병은 피흡수법인을 제외하며 합병신주를 반영합니다.
+- 예비 폐지를 모든 지수에 적용하지 않습니다. 코스닥 TOP10/15·KRX TOP10 계열·코스피200 금융고배당 TOP10은 해당 방법론의 예비 규칙이 남아 있습니다. 이번 24개 PDF 중 기존 지원과 연계된 문서는6개이며 나머지18개 검토가 신규 계산 구현을 뜻하지 않습니다.
+- KOSPI 100/50은 P01 p3 §5의 **30% CAP**을 적용합니다. 유동주식비율(FIF)과 CAP Factor는 다른 요소이며, 중대형 TMI 유니버스의 누적커버리지 계산에 쓰는10% cap과 최종 KRX 섹터지수의20% cap도 구분합니다. 코스닥 TOP15는 단독 본문의 풀시총과 개정안의 유동시총 기준이 충돌하여 공식 해석 전 HOLD로 남깁니다.
+- 과거 정기변경 재현 성적은 `data/backtest_june.json`에서 확인합니다. 현재 분류·구성종목에서 과거 상태를 역산하므로 당시 정보를 그대로 동결한 사전 예측 검증과는 차이가 있습니다. 기존 GICS 성적을 KRICS 개정 시나리오 검증 성적으로 표시하지 않습니다.
 - 관리종목·투자주의환기종목·정리매매종목·유동주식비율 10% 미만 요건은 데이터가 없어 미반영입니다.
 - 유동비율(FIF)은 KODEX 200·KODEX 코스닥150·TIGER MSCI Korea ETF 비중에서 역산한 추정치입니다.
 - 심사대상기간이 진행 중이면(예: 12월 정기변경은 5월~10월) 현재까지의 누적 평균으로 계산한 "중간 집계"입니다.

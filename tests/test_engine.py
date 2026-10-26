@@ -201,11 +201,12 @@ class PendingReviewTests(unittest.TestCase):
         self.assertEqual(result["dels"], [])
         self.assertEqual(result["cur_not_in_universe"], [])
 
-    def test_annual_semi_rollover_calculates_only_current_membership_cap(self):
+    def test_annual_semi_rollover_preserves_observation_but_holds_missing_official_inputs(self):
         self.payloads = {
             "holdings.json": {"krx_semi": {"etf_code": "091160", "date": "2026-09-10", "rows": self.rows}},
             "etf_master.json": [{"code": "091160", "name": "반도체", "aum_eok": 1000}],
             "analysis.json": {"last_daily": "20260910", "fif": {}},
+            "krx_review_events.json": {"schema_version": 1, "events": []},
         }
         with patch.object(rebal_flow.sqlite3, "connect", return_value=self.con), \
              patch.object(rebal_flow, "korea_now", return_value=datetime(2026, 9, 12, 10)), \
@@ -214,16 +215,18 @@ class PendingReviewTests(unittest.TestCase):
              contextlib.redirect_stdout(io.StringIO()):
             rebal_flow.main()
         result = self.writes["krx_semi_rebal.json"]
-        self.assertEqual(result["availability"], "pending_review")
-        self.assertEqual(result["scenarios"]["current"]["n_selected"], 10)
-        self.assertEqual(result["scenarios"]["current"]["adds"], [])
+        self.assertEqual(result["availability"], "hold")
+        self.assertEqual(result["review_availability"], "pending_review")
+        self.assertIsNone(result["scenarios"]["current"]["n_selected"])
+        self.assertIsNone(result["scenarios"]["current"]["adds"])
         self.assertTrue(all(r["avg_mcap"] is None for r in result["scenarios"]["current"]["rows"]))
-        for key in ("cap10", "literal"):
-            self.assertTrue(result["scenarios"][key]["unavailable"])
+        for key in ("current", "cap10", "literal"):
+            self.assertEqual(result["scenarios"][key]["availability"], "hold")
             self.assertIsNone(result["scenarios"][key]["n_selected"])
-            self.assertEqual(result["scenarios"][key]["rows"], [])
+            self.assertEqual(len(result["scenarios"][key]["rows"]), 10)
+            self.assertTrue(all(r["w_target"] is None and r["flow_total"] is None for r in result["scenarios"][key]["rows"]))
 
-    def test_topn_flow_rollover_uses_explicit_current_membership_assumption(self):
+    def test_topn_flow_rollover_holds_unstarted_review_and_missing_weight_inputs(self):
         self.payloads = {
             "holdings.json": {"fn_top10": {"etf_code": "292150", "date": "2026-09-10", "rows": self.rows}},
             "etf_master.json": [{"code": "292150", "name": "TOP10", "aum_eok": 1000}],
@@ -238,17 +241,24 @@ class PendingReviewTests(unittest.TestCase):
              contextlib.redirect_stdout(io.StringIO()):
             flow_engine.main()
         result = self.writes["flows.json"]["events"][0]
-        self.assertEqual(result["availability"], "pending_review")
+        self.assertEqual(result["availability"], "hold")
+        self.assertEqual(result["review_availability"], "pending_review")
+        self.assertIn("review_not_started", [r["code"] for r in result["hold_reasons"]])
+        self.assertIn("official_ffr_missing", [r["code"] for r in result["hold_reasons"]])
         self.assertIn("편출입 예측 없음", result["target_src"])
-        self.assertEqual(result["adds"], [])
-        self.assertEqual(result["dels"], [])
-        self.assertAlmostEqual(sum(r["w_target"] for r in result["rows"]), 100)
+        self.assertIsNone(result["adds"])
+        self.assertIsNone(result["dels"])
+        self.assertTrue(all(r["w_target"] is None and r["flow_total"] is None for r in result["rows"]))
 
     def test_flow_tiny_target_weight_keeps_raw_value_for_validation(self):
         from validate_data import validate_flow_rows
         tiny = self.rows[-1]["code"]
         self.con.execute("UPDATE daily SET shares=0.0001 WHERE code=?", (tiny,))
         rows = [dict(r, weight=1e-5 if r["code"] == tiny else (100 - 1e-5) / 9) for r in self.rows]
+        config = dict(flow_engine.CONFIGS[0], target="current")
+        official_inputs = {"schema_version": 1, "indexes": {"fn_top10": {
+            "official_ffr": {"status": "official", "source_url": "https://example.test/ffr", "as_of": "20260910",
+                             "values": {r["code"]: 1 for r in rows}}}}}
         self.payloads = {
             "holdings.json": {"fn_top10": {"etf_code": "292150", "date": "2026-09-10", "rows": rows}},
             "etf_master.json": [{"code": "292150", "name": "TOP10", "aum_eok": 1000}],
@@ -256,7 +266,8 @@ class PendingReviewTests(unittest.TestCase):
         }
         with patch.object(flow_engine.sqlite3, "connect", return_value=self.con), \
              patch.object(flow_engine, "korea_now", return_value=datetime(2026, 9, 15, 10)), \
-             patch.object(flow_engine, "CONFIGS", [flow_engine.CONFIGS[0]]), \
+             patch.object(flow_engine, "CONFIGS", [config]), \
+             patch.object(flow_engine, "read_flow_inputs", return_value=official_inputs), \
              patch.object(Path, "read_text", lambda p, **kw: self.read_json(p, **kw)), \
              patch.object(Path, "write_text", lambda p, t, **kw: self.capture_json(p, t, **kw)), \
              patch.object(Path, "exists", return_value=False), \

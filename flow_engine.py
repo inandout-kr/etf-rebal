@@ -15,13 +15,13 @@
 출력: data/flows.json
 """
 import json
-import math
 import sqlite3
 import sys
-from datetime import date
 from pathlib import Path
 
 from calendar_events import next_cycle
+from flow_calculation import (aggregate_events, calculate_event, reason, sector_membership,
+                              tiered_ceiling, water_fill)
 from market_dates import anchor_stocks, completed_adv, korea_now, latest_completed_date, MARKET_CLOSE, require_current_prices
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -64,7 +64,7 @@ CONFIGS = [
     dict(key="kospi100", name="KOSPI 100", proxy="kospi100", etfs=[("237350", 1.0)],
          target=("analysis_k100",), weighting=dict(type="float", cap=0.30), note="KOSPI200 심사 선정종목 중 상위100(버퍼 120/80%), 30% CAP"),
     dict(key="kospi200_it", name="코스피 200 정보기술", proxy="kospi200_it", etfs=[("139260", 1.0), ("243880", 2.0)],
-         target=("k200_sector", "정보기술"), weighting=dict(type="float", cap=0.20), note="KOSPI200 해당 회차 선정종목 중 GICS 정보기술 전부, 20% CAP 재설정"),
+         target=("k200_sector", "정보기술"), weighting=dict(type="float", cap=0.20), note="공식 KRICS 별표·지주회사 예외와 공식 FFR/CAP Factor 확인 후 계산"),
     dict(key="fn_ksemi", name="FnGuide K-반도체", proxy="fn_ksemi", etfs=[("395270", 1.0)],
          target="current", weighting=dict(type="float", cap=0.25), note="종목 변경(전월 말 선정) 미반영, 25% 실링 재적용"),
     dict(key="fn_defense", name="FnGuide K-방위산업", proxy="fn_defense", etfs=[("449450", 1.0)],
@@ -97,237 +97,113 @@ def event_has_passed(cycle, now=None):
     return end < now.date().isoformat() or (end == now.date().isoformat() and now.time() >= MARKET_CLOSE)
 
 
-def _capped_weights(weights, caps):
-    if not weights or any(not math.isfinite(v) or v <= 0 for v in weights.values()):
-        raise ValueError("가중치 계산에는 유효한 양수 시가총액이 필요합니다.")
-    if any(not math.isfinite(v) or v <= 0 for v in caps.values()) or sum(caps.values()) < 1 - 1e-12:
-        raise ValueError("구성종목 수와 비중 상한으로 100%를 배분할 수 없습니다.")
-    total = sum(weights.values())
-    w = {k: v / total for k, v in weights.items()}
-    capped = set()
-    for _ in range(len(w) + 1):
-        over = {k for k in w if k not in capped and w[k] > caps[k] + 1e-12}
-        if not over:
-            return w, capped
-        capped |= over
-        free = 1 - sum(caps[k] for k in capped)
-        rest = sum(weights[k] for k in w if k not in capped)
-        if not rest:
-            raise ValueError("비중 상한 적용 후 잔여 비중을 배분할 종목이 없습니다.")
-        w = {k: caps[k] if k in capped else weights[k] / rest * free for k in w}
-    raise ValueError("비중 상한 계산이 수렴하지 않았습니다.")
+
+def read_flow_inputs(directory=None):
+    directory = directory or DATA
+    path = directory / "flow_inputs.json"
+    if not path.exists():
+        return {"schema_version": 1, "indexes": {}}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("flow_inputs.json 최상위는 객체여야 합니다.")
+    if type(payload.get("schema_version")) is not int or payload["schema_version"] != 1:
+        raise ValueError("지원하지 않는 공식 수급입력 형식입니다.")
+    indexes = payload.get("indexes", {})
+    if not isinstance(indexes, dict):
+        raise ValueError("flow_inputs.json indexes는 객체여야 합니다.")
+    if any(not isinstance(key, str) or not key.strip() or not isinstance(value, dict)
+           for key, value in indexes.items()):
+        raise ValueError("flow_inputs.json의 지수별 입력은 이름이 있는 객체여야 합니다.")
+    if "tmi" in payload and not isinstance(payload["tmi"], dict):
+        raise ValueError("flow_inputs.json tmi는 객체여야 합니다.")
+    return payload
 
 
-def water_fill(weights, cap):
-    return _capped_weights(weights, {k: cap if cap is not None else 1.0 for k in weights})
-
-
-def tiered_ceiling(weights, first, others):
-    """가장 큰 종목 first, 나머지 others 실링 (초과분 비례 재배분 반복)"""
-    if not weights:
-        raise ValueError("가중치를 계산할 구성종목이 없습니다.")
-    top = max(weights, key=weights.get)
-    return _capped_weights(weights, {k: first if k == top else others for k in weights})[0]
+def resolve_membership(cfg, analysis, current, inputs):
+    target = cfg["target"]
+    if target == "current":
+        return {"codes": sorted(current), "status": "estimated", "basis": "구성종목 유지 가정", "hold_reasons": []}
+    result = analysis.get(target[1], {}) if len(target) > 1 else analysis.get("kospi100", {})
+    if target[0] == "analysis_topn":
+        if result.get("availability") == "pending_review":
+            return {"codes": None, "status": "hold", "basis": "심사기간 시작 전 · 편출입 예측 없음",
+                    "hold_reasons": [reason("review_not_started", "다음 심사기간이 시작되지 않았습니다.")]}
+        selected = [u["code"] for u in result.get("top", []) if not u.get("excluded")][:result["N"]]
+    elif target[0] == "analysis_krx":
+        selected = [u["code"] for u in result["all"] if u.get("status", "").startswith(("유지", "신규편입"))]
+    elif target[0] == "analysis_k100":
+        selected = sorted((set(current) - {u["code"] for u in result["dels"]}) | {u["code"] for u in result["adds"]})
+    elif target[0] == "k200_sector":
+        parent = analysis["kospi200"]
+        selected = [u["code"] for u in parent["all"] if u.get("status", "").startswith(("유지", "신규편입"))]
+        return sector_membership(cfg["key"], selected, inputs.get("membership"), analysis["last_daily"])
+    else:
+        return {"codes": None, "status": "hold", "basis": "목표 구성 미확인",
+                "hold_reasons": [reason("unsupported_target", "지원하지 않는 목표 구성종목 입력입니다.")]}
+    return {"codes": selected, "status": "estimated", "basis": "기존 선정 시뮬레이션 · 공식 결과 아님",
+            "classification": (result.get("classification") or {}).get("scheme"), "hold_reasons": []}
 
 
 def main():
-    con = sqlite3.connect(DATA / "market.sqlite")
+    con = sqlite3.connect((DATA / "market.sqlite").as_uri() + "?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
     stocks = {r["code"]: dict(r) for r in con.execute("SELECT * FROM stock")}
     holdings = json.loads((DATA / "holdings.json").read_text(encoding="utf-8"))
     by_etf = {v["etf_code"]: v for v in holdings.values()}
     etf_master = {e["code"]: e for e in json.loads((DATA / "etf_master.json").read_text(encoding="utf-8"))}
-    A = json.loads((DATA / "analysis.json").read_text(encoding="utf-8"))
+    analysis = json.loads((DATA / "analysis.json").read_text(encoding="utf-8"))
+    inputs = read_flow_inputs()
     now = korea_now()
-    today = now.date().isoformat()
     as_of = latest_completed_date(con, now)
-    if A.get("last_daily") != as_of:
-        raise ValueError("분석과 수급 계산의 시세 기준일이 다릅니다. analyze.py를 먼저 실행하세요.")
+    if analysis.get("last_daily") != as_of:
+        raise ValueError("분석과 수급 계산의 시세 기준일이 다릅니다.")
     stocks = anchor_stocks(con, stocks, as_of, current=True)
-    fif_global = A.get("fif", {})
     adv = completed_adv(con, as_of)
-    px_cache = {}
+    cache = {}
 
-    def px_at(dt):
-        dt = dt.replace("-", "")
-        if dt not in px_cache:
-            px_cache[dt] = {r[0]: r[1] for r in con.execute("SELECT code, close FROM daily WHERE date=?", (dt,))}
-        return px_cache[dt]
+    def prices_at(day):
+        day = day.replace("-", "")
+        if day not in cache:
+            cache[day] = {r[0]: r[1] for r in con.execute("SELECT code, close FROM daily WHERE date=?", (day,))}
+        return cache[day]
 
-    def adjusted_weights(h):
-        """PDF 비중을 최근 종가로 드리프트 보정 (현금 제외 재정규화)"""
-        p0 = px_at(h["date"])
-        adj = {}
-        for r in h["rows"]:
-            c, w = r.get("code"), r.get("weight")
-            if not c or w is None or c not in stocks:
-                continue
-            a, b = p0.get(c), stocks[c].get("close")
-            adj[c] = w * (b / a) if (a and b) else w
-        s = sum(adj.values())
-        return {c: w / s * 100 for c, w in adj.items()} if s else adj
-
-    def target_codes(cfg, cur):
-        t = cfg["target"]
-        if t == "current":
-            return list(cur), "구성종목 변경 없음 가정"
-        if t[0] == "analysis_topn":
-            r = A[t[1]]
-            if r.get("availability") == "pending_review":
-                return list(cur), "심사기간 시작 전: 구성 유지 가정의 비중 조정만 계산 (편출입 예측 없음)"
-            top = [u for u in r["top"] if not u.get("excluded")][: r["N"]]
-            return [u["code"] for u in top], f"analyze.py 예측 (편입 {[u['name'] for u in r['adds']]} / 편출 {[u['name'] for u in r['dels']]})"
-        if t[0] == "analysis_krx":
-            r = A[t[1]]
-            sel = [u["code"] for u in r["all"] if u.get("status") and (u["status"].startswith("유지") or u["status"].startswith("신규편입"))]
-            return sel, f"해당 회차 규칙 기반 시뮬레이션 (편입 {len(r['adds'])} / 편출 {len(r['dels'])})"
-        if t[0] == "analysis_k100":
-            r = A["kospi100"]
-            dels = {u["code"] for u in r["dels"]}
-            adds = [u["code"] for u in r["adds"]]
-            return [c for c in cur if c not in dels] + adds, f"analyze.py (편입 {[u['name'] for u in r['adds']]} / 편출 {[u['name'] for u in r['dels']]})"
-        if t[0] == "k200_sector":
-            r = A["kospi200"]
-            sel = [u["code"] for u in r["all"] if u.get("status") and (u["status"].startswith("유지") or u["status"].startswith("신규편입")) and u.get("sector") == t[1]]
-            # 현행 섹터ETF 구성종목 중 시뮬레이션에서 유지된 것 + 신규편입 중 해당 산업군
-            return sel, f"KOSPI200 해당 회차 시뮬레이션 선정종목 중 {t[1]} 산업군 ({len(sel)}종목)"
-        return list(cur), "?"
-
-    out = {"generated": A["generated"], "data_through": as_of, "data_quality": A.get("data_quality"), "events": [], "by_stock": {}}
+    out = {"schema_version": 2, "generated": analysis["generated"], "data_through": as_of,
+           "data_quality": analysis.get("data_quality"), "events": [], "by_stock": {},
+           "calculation_basis": "precomputed_event_rows; official FFR/CF separated from relative coefficients",
+           "adv_basis": {"sessions": 20, "as_of": as_of}}
     for cfg in build_configs(now.date()):
         h = holdings.get(cfg["proxy"])
         if not h:
-            print("skip (no proxy):", cfg["key"])
             continue
-        relevant_holdings = [h] + [by_etf[c] for c, _ in cfg["etfs"] if c in by_etf]
-        require_current_prices(stocks, {r["code"] for entry in relevant_holdings for r in entry["rows"]
-                                       if r.get("code") and r.get("weight") is not None}, cfg["name"])
-        cur_w = adjusted_weights(h)
-        cur = set(cur_w)
-        tgt, tgt_src = target_codes(cfg, cur)
-        require_current_prices(stocks, tgt, cfg["name"])
-        tgt = [c for c in tgt if c in stocks and stocks[c].get("mktcap")]
-        wt = cfg["weighting"]
-        cap = wt.get("cap")
-        # ---- FIF 추정: 프록시 비중/시총 역산 (캡 근접·고정비중 종목 제외), 상위 10분위 = 1.0 ----
-        excl = set()
-        if wt["type"] == "topn_fixed":
-            keyf = (lambda c: cur_w.get(c, 0)) if wt.get("pick") == "weight" else (lambda c: stocks[c]["mktcap"])
-            excl |= set(sorted(cur, key=keyf, reverse=True)[: wt["n"]])
-        if cap:
-            excl |= {c for c in cur if cur_w[c] >= cap * 100 - 0.7}
-        ratios = {c: cur_w[c] / stocks[c]["mktcap"] for c in cur if c not in excl and stocks[c].get("mktcap")}
-        vals = sorted(ratios.values(), reverse=True)
-        ref = vals[max(0, int(len(vals) * 0.1))] if vals else None
-        med = (sorted(ratios.values())[len(ratios) // 2] / ref) if (ratios and ref) else 0.6
-
-        def fif_of(c):
-            if c in ratios and ref:
-                # 상위 10분위 기준 정규화, 대형주 상대비중 보존을 위해 1.0 초과분은 1.25까지 허용
-                return max(0.05, min(1.25, ratios[c] / ref)), "프록시 역산"
-            if c in fif_global:
-                return fif_global[c], "K200/KQ150 역산"
-            return round(med, 3), "중앙값"
-
-        fifs = {c: fif_of(c) for c in set(tgt) | cur}
-        float_w = {c: stocks[c]["mktcap"] * fifs[c][0] for c in tgt}
-        # ---- 목표비중 ----
-        capped, fixed = set(), set()
-        if wt["type"] == "float":
-            w_t, capped = water_fill(float_w, cap)
-        elif wt["type"] == "score_tiered":
-            base = {c: (cur_w.get(c) or 0.01) for c in tgt}
-            w_t = tiered_ceiling(base, wt["first"], wt["others"])
-            capped = {c for c, v in w_t.items() if v >= wt["others"] - 1e-9}
-        elif wt["type"] == "topn_fixed":
-            keyf = (lambda c: cur_w.get(c, 0)) if wt.get("pick") == "weight" else (lambda c: stocks[c]["mktcap"])
-            top = sorted(tgt, key=keyf, reverse=True)[: wt["n"]]
-            fixed = set(top)
-            rest = [c for c in tgt if c not in fixed]
-            free = 1 - wt["w"] * len(top)
-            if free < 0 or (free > 1e-12 and not rest):
-                raise ValueError(f"{cfg['name']}: 고정 비중 적용 후 잔여 종목이 부족합니다.")
-            if wt["rest"] == "equal":
-                rw = {c: free / len(rest) for c in rest}
-            elif wt["rest"] == "current":
-                s = sum(cur_w.get(c, 0.01) for c in rest)
-                rw = {c: free * cur_w.get(c, 0.01) / s for c in rest}
-            else:
-                rw, capped = water_fill({c: float_w[c] for c in rest}, (cap / free) if cap else None)
-                rw = {c: v * free for c, v in rw.items()}
-            w_t = {**{c: wt["w"] for c in top}, **rw}
-        else:
-            raise ValueError(wt["type"])
-        # ---- ETF별 명목·플로우 ----
-        etfs_meta, flows = [], {}
-        for code, mult in cfg["etfs"]:
-            aum = etf_master.get(code, {}).get("aum_eok")
-            if not aum:
-                continue
-            eh = by_etf.get(code)
-            note = f"순자산 {aum:,.0f}억"
-            notional = aum * mult
-            if mult > 1 and eh:
-                # 코드 매칭 안 되는 보유행 중 선물이 아닌 것 = 기초 ETF 실물 보유 (KODEX 200 등)
-                inner = sum((r.get("weight") or 0) for r in eh["rows"] if r.get("code") is None and "선물" not in r["name"])
-                if inner:
-                    notional = aum * (mult - inner / 100)
-                    note = f"{mult:.0f}배 명목 {aum*mult:,.0f}억 − 기초ETF 실물 {inner:.1f}% 중복 = {notional:,.0f}억"
-                else:
-                    note = f"{mult:.0f}배 명목 {notional:,.0f}억 (스왑·선물 헤지 포함 가정)"
-            elif mult > 1:
-                note = f"{mult:.0f}배 명목 {notional:,.0f}억 (PDF 없음)"
-            w_e = adjusted_weights(eh) if (eh and mult == 1) else cur_w
-            etfs_meta.append({"code": code, "name": etf_master[code]["name"], "aum_eok": aum, "notional_eok": round(notional), "note": note})
-            for c in set(tgt) | cur | set(w_e):
-                flows.setdefault(c, {})[code] = notional * ((w_t.get(c, 0) * 100) - w_e.get(c, 0)) / 100
-        all_codes = set(tgt) | cur | set(flows)
-        rows = []
-        for c in all_codes:
-            f = flows.get(c, {})
-            tot = sum(f.values())
-            st = ("유지" if c in tgt else "편출") if c in cur else "신규편입"
-            # w_target 은 화면 표시용 3자리 반올림, w_target_raw 는 검증용 원값 (0.0005% 미만 양수 비중이 0.000 으로 보이는 경우)
-            rows.append({"code": c, "name": stocks[c]["name"], "status": st, "w_cur": round(cur_w.get(c, 0), 3), "w_target": round(w_t.get(c, 0) * 100, 3),
-                         "w_target_raw": w_t.get(c, 0) * 100, "delta": round(w_t.get(c, 0) * 100 - cur_w.get(c, 0), 3), "fixed": c in fixed, "capped": c in capped,
-                         "flow_by_etf": {k: round(v, 1) for k, v in f.items()}, "flow_total": round(tot, 1),
-                         "adv20": adv.get(c), "adv_mult": (abs(tot) * 1e8 / adv[c]) if adv.get(c) else None,
-                         "fif": round(fifs[c][0], 3), "fif_src": fifs[c][1], "mktcap_now": stocks[c]["mktcap"],
-                         "price_as_of": stocks[c].get("price_as_of"), "price_status": stocks[c].get("price_status"),
-                         "universe_as_of": stocks[c].get("universe_as_of")})
-        rows.sort(key=lambda r: -abs(r["flow_total"]))
-        ev = {"key": cfg["key"], "name": cfg["name"], "apply": cfg["apply"], "fix": cfg.get("fix"), "proxy_etf": h["etf_code"], "pdf_date": h["date"],
-              "window": cfg["cycle"], "date_status": cfg["cycle"]["date_status"], "apply_end": cfg["cycle"]["apply_end"],
-              "availability": "pending_review" if "심사기간 시작 전" in tgt_src else "ready",
-              "target_src": tgt_src, "weighting": wt, "note": cfg.get("note"), "etfs": etfs_meta, "notional_total": round(sum(e["notional_eok"] for e in etfs_meta)),
-              "n_current": len(cur), "n_target": len(tgt), "adds": [r["name"] for r in rows if r["status"] == "신규편입"], "dels": [r["name"] for r in rows if r["status"] == "편출"],
-              "total_buy": round(sum(r["flow_total"] for r in rows if r["flow_total"] > 0), 1), "total_sell": round(sum(r["flow_total"] for r in rows if r["flow_total"] < 0), 1),
-              "rows": rows}
-        ev["trade_date"] = cfg["cycle"]["trade_date"]
-        ev["trade_end"] = cfg["cycle"]["trade_end"]
-        ev["passed"] = event_has_passed(cfg["cycle"], now)
-        out["events"].append(ev)
-        if ev["passed"]:   # 매매 끝난 이벤트: 스냅샷은 archive.py 가 보관, 합산·표시에서 제외
-            continue
-        for r in rows:
-            out["by_stock"].setdefault(r["code"], {"name": r["name"], "events": [], "total": 0.0})
-            out["by_stock"][r["code"]]["events"].append({"key": cfg["key"], "index": cfg["name"], "apply": cfg["apply"], "flow": r["flow_total"], "status": r["status"], "adv_mult": r["adv_mult"]})
-            out["by_stock"][r["code"]]["total"] = round(out["by_stock"][r["code"]]["total"] + r["flow_total"], 1)
-        print(f"{cfg['name']:24s} {cfg['apply']:22s} 명목 {ev['notional_total']:>8,}억  buy +{ev['total_buy']:>8,.0f} sell {ev['total_sell']:>9,.0f}  adds {ev['adds'][:4]} dels {ev['dels'][:4]}")
-    # KRX 반도체(별도 모듈) 결과를 by_stock 합산에 포함
-    semi_p = DATA / "krx_semi_rebal.json"
-    if semi_p.exists():
-        semi = json.loads(semi_p.read_text(encoding="utf-8"))
-        sc = semi["scenarios"]["current"]
-        semi_active = semi["expiry"] > today or (semi["expiry"] == today and now.time() < MARKET_CLOSE)
-        for r in (sc["rows"] if semi_active else []):
-            if not r.get("flow_total"):
-                continue
-            out["by_stock"].setdefault(r["code"], {"name": r["name"], "events": [], "total": 0.0})
-            out["by_stock"][r["code"]]["events"].append({"key": "krx_semi", "index": "KRX 반도체 (시나리오A)", "apply": semi["apply"], "flow": r["flow_total"], "status": r["status"], "adv_mult": r.get("adv_mult")})
-            out["by_stock"][r["code"]]["total"] = round(out["by_stock"][r["code"]]["total"] + r["flow_total"], 1)
-    (DATA / "flows.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+        relevant = [h] + [by_etf[c] for c, _ in cfg["etfs"] if c in by_etf]
+        require_current_prices(stocks, {r["code"] for entry in relevant for r in entry["rows"]
+            if r.get("code") and r.get("weight") is not None}, cfg["name"])
+        supplied = inputs.get("indexes", {}).get(cfg["key"], {})
+        membership = resolve_membership(cfg, analysis, {r["code"] for r in h["rows"] if r.get("code")}, supplied)
+        if membership["codes"] is not None:
+            require_current_prices(stocks, membership["codes"], cfg["name"])
+        event = calculate_event(cfg, membership, stocks, holdings, etf_master, analysis, adv, prices_at, cfg["cycle"], supplied)
+        event["passed"] = event_has_passed(cfg["cycle"], now)
+        out["events"].append(event)
+        print(cfg["key"], event["availability"], "hold reasons", len(event["hold_reasons"]))
+    aggregate = list(out["events"])
+    semi_path = DATA / "krx_semi_rebal.json"
+    if semi_path.exists():
+        semi = json.loads(semi_path.read_text(encoding="utf-8"))
+        scenario = semi.get("scenarios", {}).get("current", {})
+        rows = scenario.get("rows", [])
+        if semi.get("schema_version") != 2:
+            rows = [{**r, "flow_total": None, "status": "검토보류"} for r in rows]
+        aggregate.append({"key": "krx_semi", "name": "KRX 반도체", "apply": semi["apply"], "rows": rows,
+            "hold_reasons": scenario.get("hold_reasons", [reason("legacy_flow_not_replayed", "공식 입력 검증 전 수급은 합산하지 않습니다.")]),
+            "passed": event_has_passed(semi.get("window") or {"trade_end": semi["expiry"]}, now)})
+    out["by_stock"] = aggregate_events(aggregate)
+    out["coverage"] = {"known_events": sum(e["availability"] != "hold" for e in out["events"]),
+                       "held_events": sum(e["availability"] == "hold" for e in out["events"]),
+                       "complete": all(e["availability"] != "hold" for e in out["events"])}
+    (DATA / "flows.json").write_text(json.dumps(out, ensure_ascii=False, indent=1, allow_nan=False), encoding="utf-8")
     print("saved data/flows.json")
+    return out
 
 
 if __name__ == "__main__":

@@ -61,6 +61,8 @@ def norm_rows(rows, cur_key):
 
 
 def from_semi(semi, holdings, generated):
+    if semi.get("scenarios", {}).get("current", {}).get("availability") == "hold":
+        return None  # An unknown forecast is not an empty or zero-flow prediction.
     start, trade, settle = event_dates(semi["apply"])
     pdf = holdings["krx_semi"]
     etfs = semi["scenarios"]["current"]["etfs"]
@@ -75,12 +77,15 @@ def from_semi(semi, holdings, generated):
         "scenarios": {k: {"desc": semi["scenario_desc"].get(k, k), "adds": [r["name"] for r in sc["rows"] if r["status"].startswith("신규편입")],
                           "dels": [r["name"] for r in sc["rows"] if r["status"].startswith("편출")],
                           "total_buy": sc["total_buy_eok"], "total_sell": sc["total_sell_eok"], "rows": norm_rows(sc["rows"], "w_cur_adj")}
-                      for k, sc in semi["scenarios"].items()},
+                      for k, sc in semi["scenarios"].items()
+                      if sc.get("availability") != "hold" and not sc.get("unavailable")},
         "actual": None,
     }
 
 
 def from_flow(ev, holdings, generated):
+    if ev.get("availability") == "hold":
+        return None
     apply_end = ev.get("apply_end") or (ev.get("window") or {}).get("apply_end")
     start, trade, settle = event_dates(ev["apply"], apply_end)
     pdf = next(v for v in holdings.values() if v["etf_code"] == ev["proxy_etf"])
@@ -154,6 +159,8 @@ def main():
 
     # 1) 매매일 도래 → 스냅샷 동결 (기존 파일은 보존)
     for arc in cands:
+        if arc is None:
+            continue
         p = HIST / f"{arc['key']}_{arc['apply_start']}.json"
         if arc["trade_date"] <= today and not p.exists():
             p.write_text(json.dumps(arc, ensure_ascii=False, indent=1), encoding="utf-8")

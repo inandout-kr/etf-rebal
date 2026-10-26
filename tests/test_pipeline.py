@@ -264,23 +264,84 @@ class QualityTests(unittest.TestCase):
             with self.assertRaisesRegex(DataQualityError, "빌드 후 원본 변경"):
                 validate_dist(data_dir, dist_dir, NOW)
 
+    def test_build_preserves_nonproxy_etf_sales_and_explicit_hold_nulls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            data_dir, dist_dir = root / "data", root / "dist"
+            data_dir.mkdir()
+            source = artifacts()
+            source['krx_semi_rebal']['expiry'] = '2199-12-31'
+            rows = source['krx_semi_rebal']['scenarios']['current']['rows']
+            rows[1].update(is_cur=False, in_midlarge=False, status='편출',
+                           w_target=0, flow_total=-10, official_ffr=None, cap_factor=None)
+            for name, value in source.items():
+                (data_dir / f'{name}.json').write_text(json.dumps(value), encoding='utf-8')
+            (root / 'template.html').write_text('<script>const D=/*__DATA__*/null;</script>', encoding='utf-8')
+            with patch.object(build_site, 'ROOT', root), patch.object(build_site, 'DATA', data_dir), \
+                 patch.object(build_site, 'DIST', dist_dir), \
+                 patch.object(build_site, 'validate_directory', return_value={'warnings': []}), \
+                 redirect_stdout(io.StringIO()):
+                build_site.main()
+            payload = json.loads((dist_dir / 'data.json').read_text(encoding='utf-8'))
+            published = payload['semi']['scenarios']['current']['rows']
+            self.assertEqual({r['code'] for r in published}, {'005930', '000660'})
+            sale = next(r for r in published if r['code'] == '000660')
+            self.assertEqual(sale['flow_total'], -10)
+            self.assertEqual(sale['w_target'], 0)
+            self.assertIn('official_ffr', sale)
+            self.assertIsNone(sale['official_ffr'])
+
 
 class DailyChangeTests(unittest.TestCase):
     def snapshot(self, day="20260910", code="005930", total=10):
         return daily_snapshot({"last_daily": day, "generated": "2026-09-11 08:00", "kospi200": {
             "name": "KOSPI 200", "adds": [{"code": code, "name": code}]}},
-            {"by_stock": {code: {"name": code, "total": total}}})
+            {"by_stock": {code: {"name": code, "total": total, "known_total": total,
+                                 "complete": True, "held_count": 0,
+                                 "events": [{"key": "kospi200", "apply": "2026-12-11"}]}}})
 
     def test_first_day_has_no_fabricated_changes(self):
         result = compare_snapshots(self.snapshot())
         self.assertEqual(result, {"status": "baseline_created", "baseline_date": None,
-                                 "current_date": "2026-09-10", "adds": [], "flows": []})
+                                 "current_date": "2026-09-10", "adds": [], "flows": [], "flow_comparison_holds": []})
 
     def test_next_day_new_removed_candidates_and_signed_flow_deltas(self):
         result = compare_snapshots(self.snapshot("20260911", "000660", -20), self.snapshot())
         self.assertEqual(result["status"], "ready")
         self.assertEqual({(r["code"], r["change"]) for r in result["adds"]}, {("005930", "removed"), ("000660", "new")})
-        self.assertEqual([(r["code"], r["delta"]) for r in result["flows"]], [("000660", -20), ("005930", -10)])
+        self.assertEqual(result["flows"], [])
+        self.assertEqual({r["code"] for r in result["flow_comparison_holds"]}, {"000660", "005930"})
+
+    def test_same_known_coverage_has_signed_delta(self):
+        result = compare_snapshots(self.snapshot("20260911", total=-20), self.snapshot())
+        self.assertEqual(result["flows"][0]["delta"], -30)
+        self.assertEqual(result["flow_comparison_holds"], [])
+
+    def test_hold_and_changed_coverage_never_become_zero_or_crash(self):
+        current = self.snapshot("20260911", total=None)
+        result = compare_snapshots(current, self.snapshot())
+        self.assertEqual(result["flows"], [])
+        self.assertIn("HOLD", result["flow_comparison_holds"][0]["reason"])
+        result = compare_snapshots(current, current)
+        self.assertEqual(result["flows"], [])
+        current = self.snapshot("20260911", total=20)
+        current["flows"]["005930"]["known_coverage"] = [["kosdaq150", "2026-12-11"]]
+        result = compare_snapshots(current, self.snapshot())
+        self.assertEqual(result["flows"], [])
+        self.assertIn("범위", result["flow_comparison_holds"][0]["reason"])
+
+    def test_partial_totals_remain_partial_and_old_snapshot_is_unknown(self):
+        before, after = self.snapshot(), self.snapshot("20260911", total=20)
+        for snapshot in (before, after):
+            snapshot["flows"]["005930"].update(complete=False, held_count=1,
+                held_coverage=[["kospi200_it", "2026-12-11"]])
+        result = compare_snapshots(after, before)
+        self.assertEqual(result["flows"][0]["delta"], 10)
+        self.assertTrue(result["flows"][0]["partial"])
+        before["flows"]["005930"].pop("coverage_known")
+        result = compare_snapshots(after, before)
+        self.assertEqual(result["flows"], [])
+        self.assertIn("범위", result["flow_comparison_holds"][0]["reason"])
 
     def test_repeat_build_compares_latest_prior_distinct_date(self):
         with tempfile.TemporaryDirectory() as directory:

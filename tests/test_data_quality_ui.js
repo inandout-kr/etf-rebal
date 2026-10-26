@@ -209,3 +209,4 @@ assert.equal(ui.context.krxBasisBadge('kospi100'), '');
 vm.runInContext("A.kosdaq150.classification.status='reference_pending_krics'", ui.context);
 assert.match(ui.context.krxTransitionNotice(), /참고 · KRICS 산업분류 전환 예정/);
 console.log('PASS: dashboard/tabs/data quality retained; KRX discretionary scenario, review period, special candidates and shared KRICS transition notice');
+module.exports = {page};

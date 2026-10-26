@@ -1,0 +1,731 @@
+{
+ "key": "wise_battery",
+ "name": "WISE 2차전지 테마",
+ "apply": "2026-10-12",
+ "apply_start": "2026-10-12",
+ "trade_date": "2026-10-08",
+ "settle_date": "2026-10-08",
+ "fix": "2026-10-08 종가 기준(일정 규칙)",
+ "rules": "목표 구성: 구성종목 변경 없음 가정 · 종목 변경 미반영, 15% 실링 재적용",
+ "proxy_etf": "305540",
+ "snapshot": {
+  "generated": "2026-10-08 08:12",
+  "saved": "2026-10-08 08:13",
+  "pdf_date": "2026-10-07",
+  "data_through": null,
+  "pre_trade": true
+ },
+ "etfs": [
+  {
+   "code": "305540",
+   "name": "TIGER 2차전지테마",
+   "aum_eok": 9316.0,
+   "notional_eok": 9316
+  }
+ ],
+ "notional_total": 9316,
+ "pdf_rows": {
+  "006400": 16.59,
+  "373220": 15.06,
+  "051910": 12.53,
+  "005490": 11.66,
+  "096770": 11.11,
+  "003670": 7.89,
+  "086520": 5.77,
+  "247540": 5.77,
+  "011790": 2.48,
+  "066970": 2.21,
+  "020150": 1.3,
+  "450080": 1.26,
+  "078600": 0.82,
+  "093370": 0.76,
+  "005070": 0.71,
+  "361610": 0.69,
+  "036830": 0.45,
+  "137400": 0.36,
+  "121600": 0.36,
+  "222080": 0.3,
+  "336370": 0.29,
+  "348370": 0.23,
+  "365340": 0.23,
+  "278280": 0.22,
+  "005420": 0.2,
+  "393890": 0.16,
+  "243840": 0.11,
+  "101360": 0.07,
+  "299030": 0.06
+ },
+ "default_scenario": "base",
+ "scenarios": {
+  "base": {
+   "desc": "공식 가중·캡 규칙 적용 예측",
+   "adds": [],
+   "dels": [],
+   "total_buy": 363.0,
+   "total_sell": -362.9,
+   "rows": [
+    {
+     "code": "373220",
+     "name": "LG에너지솔루션",
+     "status": "유지",
+     "w_cur": 15.113,
+     "w_target": 12.881,
+     "delta": -2.232,
+     "flow_total": -207.9,
+     "adv_mult": 0.20395434805535642,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": -207.9
+     }
+    },
+    {
+     "code": "006400",
+     "name": "삼성SDI",
+     "status": "유지",
+     "w_cur": 16.648,
+     "w_target": 15.0,
+     "delta": -1.648,
+     "flow_total": -153.6,
+     "adv_mult": 0.0841434806867871,
+     "capped": true,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": -153.6
+     }
+    },
+    {
+     "code": "005490",
+     "name": "POSCO홀딩스",
+     "status": "유지",
+     "w_cur": 11.701,
+     "w_target": 12.52,
+     "delta": 0.819,
+     "flow_total": 76.3,
+     "adv_mult": 0.1184637967117417,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 76.3
+     }
+    },
+    {
+     "code": "096770",
+     "name": "SK이노베이션",
+     "status": "유지",
+     "w_cur": 11.149,
+     "w_target": 11.929,
+     "delta": 0.78,
+     "flow_total": 72.7,
+     "adv_mult": 0.05099132257014765,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 72.7
+     }
+    },
+    {
+     "code": "003670",
+     "name": "포스코퓨처엠",
+     "status": "유지",
+     "w_cur": 7.918,
+     "w_target": 8.472,
+     "delta": 0.554,
+     "flow_total": 51.6,
+     "adv_mult": 0.0888315053793397,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 51.6
+     }
+    },
+    {
+     "code": "247540",
+     "name": "에코프로비엠",
+     "status": "유지",
+     "w_cur": 5.79,
+     "w_target": 6.195,
+     "delta": 0.405,
+     "flow_total": 37.8,
+     "adv_mult": 0.09447430987551149,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 37.8
+     }
+    },
+    {
+     "code": "086520",
+     "name": "에코프로",
+     "status": "유지",
+     "w_cur": 5.79,
+     "w_target": 6.195,
+     "delta": 0.405,
+     "flow_total": 37.8,
+     "adv_mult": 0.07410332049141181,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 37.8
+     }
+    },
+    {
+     "code": "011790",
+     "name": "SKC",
+     "status": "유지",
+     "w_cur": 2.489,
+     "w_target": 2.663,
+     "delta": 0.174,
+     "flow_total": 16.2,
+     "adv_mult": 0.07675882874624668,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 16.2
+     }
+    },
+    {
+     "code": "066970",
+     "name": "엘앤에프",
+     "status": "유지",
+     "w_cur": 2.218,
+     "w_target": 2.373,
+     "delta": 0.155,
+     "flow_total": 14.5,
+     "adv_mult": 0.02458297898725813,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 14.5
+     }
+    },
+    {
+     "code": "020150",
+     "name": "롯데에너지머티리얼즈",
+     "status": "유지",
+     "w_cur": 1.305,
+     "w_target": 1.396,
+     "delta": 0.091,
+     "flow_total": 8.5,
+     "adv_mult": 0.05793736636103772,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 8.5
+     }
+    },
+    {
+     "code": "450080",
+     "name": "에코프로머티",
+     "status": "유지",
+     "w_cur": 1.264,
+     "w_target": 1.353,
+     "delta": 0.088,
+     "flow_total": 8.2,
+     "adv_mult": 0.08115040171591639,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 8.2
+     }
+    },
+    {
+     "code": "078600",
+     "name": "대주전자재료",
+     "status": "유지",
+     "w_cur": 0.823,
+     "w_target": 0.88,
+     "delta": 0.058,
+     "flow_total": 5.4,
+     "adv_mult": 0.03855273378114468,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 5.4
+     }
+    },
+    {
+     "code": "093370",
+     "name": "후성",
+     "status": "유지",
+     "w_cur": 0.763,
+     "w_target": 0.816,
+     "delta": 0.053,
+     "flow_total": 5.0,
+     "adv_mult": 0.00786183902343763,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 5.0
+     }
+    },
+    {
+     "code": "005070",
+     "name": "코스모신소재",
+     "status": "유지",
+     "w_cur": 0.712,
+     "w_target": 0.762,
+     "delta": 0.05,
+     "flow_total": 4.6,
+     "adv_mult": 0.07853076184170313,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 4.6
+     }
+    },
+    {
+     "code": "361610",
+     "name": "SK아이이테크놀로지",
+     "status": "유지",
+     "w_cur": 0.692,
+     "w_target": 0.741,
+     "delta": 0.048,
+     "flow_total": 4.5,
+     "adv_mult": 0.04795355391774467,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 4.5
+     }
+    },
+    {
+     "code": "036830",
+     "name": "솔브레인홀딩스",
+     "status": "유지",
+     "w_cur": 0.452,
+     "w_target": 0.483,
+     "delta": 0.032,
+     "flow_total": 2.9,
+     "adv_mult": 0.1062093844305992,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 2.9
+     }
+    },
+    {
+     "code": "137400",
+     "name": "피엔티",
+     "status": "유지",
+     "w_cur": 0.361,
+     "w_target": 0.387,
+     "delta": 0.025,
+     "flow_total": 2.4,
+     "adv_mult": 0.06929834675641447,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 2.4
+     }
+    },
+    {
+     "code": "121600",
+     "name": "나노신소재",
+     "status": "유지",
+     "w_cur": 0.361,
+     "w_target": 0.387,
+     "delta": 0.025,
+     "flow_total": 2.4,
+     "adv_mult": 0.05703168092747321,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 2.4
+     }
+    },
+    {
+     "code": "222080",
+     "name": "SFA넥셀",
+     "status": "유지",
+     "w_cur": 0.301,
+     "w_target": 0.322,
+     "delta": 0.021,
+     "flow_total": 2.0,
+     "adv_mult": 0.057426272538128306,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 2.0
+     }
+    },
+    {
+     "code": "336370",
+     "name": "솔루스첨단소재",
+     "status": "유지",
+     "w_cur": 0.291,
+     "w_target": 0.311,
+     "delta": 0.02,
+     "flow_total": 1.9,
+     "adv_mult": 0.08882115467578573,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 1.9
+     }
+    },
+    {
+     "code": "348370",
+     "name": "엔켐",
+     "status": "유지",
+     "w_cur": 0.231,
+     "w_target": 0.247,
+     "delta": 0.016,
+     "flow_total": 1.5,
+     "adv_mult": 0.04250441522278201,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 1.5
+     }
+    },
+    {
+     "code": "365340",
+     "name": "성일하이텍",
+     "status": "유지",
+     "w_cur": 0.231,
+     "w_target": 0.247,
+     "delta": 0.016,
+     "flow_total": 1.5,
+     "adv_mult": 0.1271604735591351,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 1.5
+     }
+    },
+    {
+     "code": "051910",
+     "name": "LG화학",
+     "status": "유지",
+     "w_cur": 12.574,
+     "w_target": 12.559,
+     "delta": -0.015,
+     "flow_total": -1.4,
+     "adv_mult": 0.0028123766852914903,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": -1.4
+     }
+    },
+    {
+     "code": "278280",
+     "name": "천보",
+     "status": "유지",
+     "w_cur": 0.221,
+     "w_target": 0.236,
+     "delta": 0.015,
+     "flow_total": 1.4,
+     "adv_mult": 0.14966344097597645,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 1.4
+     }
+    },
+    {
+     "code": "005420",
+     "name": "코스모화학",
+     "status": "유지",
+     "w_cur": 0.201,
+     "w_target": 0.215,
+     "delta": 0.014,
+     "flow_total": 1.3,
+     "adv_mult": 0.12877132799411128,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 1.3
+     }
+    },
+    {
+     "code": "393890",
+     "name": "더블유씨피",
+     "status": "유지",
+     "w_cur": 0.161,
+     "w_target": 0.172,
+     "delta": 0.011,
+     "flow_total": 1.0,
+     "adv_mult": 0.04425079628206427,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 1.0
+     }
+    },
+    {
+     "code": "243840",
+     "name": "신흥에스이씨",
+     "status": "유지",
+     "w_cur": 0.11,
+     "w_target": 0.118,
+     "delta": 0.008,
+     "flow_total": 0.7,
+     "adv_mult": 0.08581084211938314,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 0.7
+     }
+    },
+    {
+     "code": "101360",
+     "name": "에코앤드림",
+     "status": "유지",
+     "w_cur": 0.07,
+     "w_target": 0.075,
+     "delta": 0.005,
+     "flow_total": 0.5,
+     "adv_mult": 0.09705626254832611,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 0.5
+     }
+    },
+    {
+     "code": "299030",
+     "name": "하나기술",
+     "status": "유지",
+     "w_cur": 0.06,
+     "w_target": 0.064,
+     "delta": 0.004,
+     "flow_total": 0.4,
+     "adv_mult": 0.07393427677364953,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "305540": 0.4
+     }
+    }
+   ]
+  }
+ },
+ "actual": {
+  "pdf_date": "2026-10-08",
+  "adds": [],
+  "dels": [],
+  "rows": {
+   "003670": {
+    "name": "포스코퓨처엠",
+    "w_old": 7.878,
+    "w_new": 7.85,
+    "delta": -0.028,
+    "flow": -2.6
+   },
+   "121600": {
+    "name": "나노신소재",
+    "w_old": 0.361,
+    "w_new": 0.36,
+    "delta": -0.001,
+    "flow": -0.1
+   },
+   "011790": {
+    "name": "SKC",
+    "w_old": 2.45,
+    "w_new": 2.44,
+    "delta": -0.01,
+    "flow": -0.9
+   },
+   "066970": {
+    "name": "엘앤에프",
+    "w_old": 2.161,
+    "w_new": 2.16,
+    "delta": -0.001,
+    "flow": -0.1
+   },
+   "005420": {
+    "name": "코스모화학",
+    "w_old": 0.2,
+    "w_new": 0.2,
+    "delta": 0.0,
+    "flow": 0.0
+   },
+   "078600": {
+    "name": "대주전자재료",
+    "w_old": 0.83,
+    "w_new": 0.83,
+    "delta": -0.0,
+    "flow": -0.0
+   },
+   "051910": {
+    "name": "LG화학",
+    "w_old": 12.826,
+    "w_new": 12.78,
+    "delta": -0.046,
+    "flow": -4.2
+   },
+   "365340": {
+    "name": "성일하이텍",
+    "w_old": 0.227,
+    "w_new": 0.22,
+    "delta": -0.007,
+    "flow": -0.6
+   },
+   "336370": {
+    "name": "솔루스첨단소재",
+    "w_old": 0.278,
+    "w_new": 0.28,
+    "delta": 0.002,
+    "flow": 0.2
+   },
+   "450080": {
+    "name": "에코프로머티",
+    "w_old": 1.227,
+    "w_new": 1.22,
+    "delta": -0.007,
+    "flow": -0.7
+   },
+   "036830": {
+    "name": "솔브레인홀딩스",
+    "w_old": 0.468,
+    "w_new": 0.46,
+    "delta": -0.008,
+    "flow": -0.8
+   },
+   "101360": {
+    "name": "에코앤드림",
+    "w_old": 0.071,
+    "w_new": 0.07,
+    "delta": -0.001,
+    "flow": -0.1
+   },
+   "361610": {
+    "name": "SK아이이테크놀로지",
+    "w_old": 0.695,
+    "w_new": 0.69,
+    "delta": -0.005,
+    "flow": -0.4
+   },
+   "393890": {
+    "name": "더블유씨피",
+    "w_old": 0.176,
+    "w_new": 0.18,
+    "delta": 0.004,
+    "flow": 0.4
+   },
+   "005490": {
+    "name": "POSCO홀딩스",
+    "w_old": 11.502,
+    "w_new": 11.46,
+    "delta": -0.042,
+    "flow": -3.9
+   },
+   "348370": {
+    "name": "엔켐",
+    "w_old": 0.216,
+    "w_new": 0.22,
+    "delta": 0.004,
+    "flow": 0.4
+   },
+   "373220": {
+    "name": "LG에너지솔루션",
+    "w_old": 15.285,
+    "w_new": 15.23,
+    "delta": -0.055,
+    "flow": -5.2
+   },
+   "005070": {
+    "name": "코스모신소재",
+    "w_old": 0.7,
+    "w_new": 0.7,
+    "delta": -0.0,
+    "flow": -0.0
+   },
+   "096770": {
+    "name": "SK이노베이션",
+    "w_old": 11.085,
+    "w_new": 11.05,
+    "delta": -0.035,
+    "flow": -3.2
+   },
+   "020150": {
+    "name": "롯데에너지머티리얼즈",
+    "w_old": 1.322,
+    "w_new": 1.32,
+    "delta": -0.002,
+    "flow": -0.2
+   },
+   "222080": {
+    "name": "SFA넥셀",
+    "w_old": 0.305,
+    "w_new": 0.31,
+    "delta": 0.005,
+    "flow": 0.5
+   },
+   "086520": {
+    "name": "에코프로",
+    "w_old": 5.71,
+    "w_new": 5.69,
+    "delta": -0.02,
+    "flow": -1.9
+   },
+   "006400": {
+    "name": "삼성SDI",
+    "w_old": 16.623,
+    "w_new": 16.56,
+    "delta": -0.063,
+    "flow": -5.8
+   },
+   "093370": {
+    "name": "후성",
+    "w_old": 0.741,
+    "w_new": 0.74,
+    "delta": -0.001,
+    "flow": -0.1
+   },
+   "247540": {
+    "name": "에코프로비엠",
+    "w_old": 5.907,
+    "w_new": 5.88,
+    "delta": -0.027,
+    "flow": -2.6
+   },
+   "278280": {
+    "name": "천보",
+    "w_old": 0.218,
+    "w_new": 0.22,
+    "delta": 0.002,
+    "flow": 0.2
+   },
+   "243840": {
+    "name": "신흥에스이씨",
+    "w_old": 0.116,
+    "w_new": 0.11,
+    "delta": -0.006,
+    "flow": -0.6
+   },
+   "299030": {
+    "name": "하나기술",
+    "w_old": 0.057,
+    "w_new": 0.05,
+    "delta": -0.007,
+    "flow": -0.7
+   },
+   "137400": {
+    "name": "피엔티",
+    "w_old": 0.364,
+    "w_new": 0.36,
+    "delta": -0.004,
+    "flow": -0.4
+   }
+  },
+  "total_buy": 1.7,
+  "total_sell": -35.1,
+  "by_scenario": {
+   "base": {
+    "adds_hit": [],
+    "adds_fp": [],
+    "adds_miss": [],
+    "dels_hit": [],
+    "dels_fp": [],
+    "dels_miss": [],
+    "n_pairs": 14,
+    "dir_hit": 0.14285714285714285,
+    "corr": 0.5077772665613762
+   }
+  },
+  "computed": "2026-10-09 08:13"
+ }
+}

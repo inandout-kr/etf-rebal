@@ -106,7 +106,7 @@ sys.exit(7 if sys.argv[1] == os.environ.get("SCHEDULER_TEST_FAILURE") else 0)
         self.assertNotEqual(failed.returncode, 0, log)
         self.assertEqual(calls, [["fetch_market.py"]])
         self.assertIn("traceback final line", log)
-        self.assertIn("Python step failed (7)", log)
+        self.assertRegex(log, r"Python step failed\s*\(\s*7\s*\)")
 
     def test_native_failure_stops_pipeline_and_reaches_scheduler(self):
         for step in ("fetch_market.py", "backtest_june.py", "validate_data.py"):
@@ -114,7 +114,7 @@ sys.exit(7 if sys.argv[1] == os.environ.get("SCHEDULER_TEST_FAILURE") else 0)
                 completed, calls, log = self.run_isolated_scheduler(step)
                 self.assertNotEqual(completed.returncode, 0, log)
                 self.assertEqual(calls[-1], [step])
-                self.assertIn("Python step failed (7)", log)
+                self.assertRegex(log, r"Python step failed\s*\(\s*7\s*\)")
                 self.assertNotIn("deployment stub", log)
 
 

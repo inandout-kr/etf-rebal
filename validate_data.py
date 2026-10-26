@@ -83,6 +83,20 @@ def validate_flow_rows(rows, label, target_count=None, total_buy=None, total_sel
             f"{label}: 매수/매도 수급 보존 불일치")
 
 
+def validate_held_flow(event, label):
+    """Unknown membership/FFR must never serialize as a zero sale or known total."""
+    require(bool(event.get("hold_reasons")), f"{label}: HOLD 사유 없음")
+    for field in ("adds", "dels", "n_target", "total_buy", "total_sell"):
+        require(event.get(field) is None, f"{label}: HOLD에 확정 {field} 값")
+    codes = [r.get("code") for r in event.get("rows", [])]
+    require(all(codes) and len(set(codes)) == len(codes), f"{label}: HOLD 행 코드 누락/중복")
+    for row in event.get("rows", []):
+        for field in ("w_target", "w_target_raw", "delta", "flow_total", "adv_mult"):
+            require(row.get(field) is None, f"{label}/{row['code']}: HOLD에 숫자 {field}")
+        require(all(v is None for v in row.get("flow_by_etf", {}).values()),
+                f"{label}/{row['code']}: HOLD의 ETF별 수급 확정")
+
+
 def validate_artifacts(artifacts, now=None):
     """Validate serialized contracts without opening a live source or modifying files."""
     from fetch_holdings import PROXY, validate_holdings
@@ -135,18 +149,37 @@ def validate_artifacts(artifacts, now=None):
     require(bool(events), "수급 이벤트 없음")
     require(len({e["key"] for e in events}) == len(events), "수급 이벤트 중복")
     expected_flows = defaultdict(float)
+    expected_held = defaultdict(int)
     for event in events:
+        if event.get("availability") == "hold":
+            validate_held_flow(event, event["key"])
+            warnings.append(f"{event['key']}: 수급 HOLD (합산에서 제외)")
+            if not event.get("passed"):
+                for row in event["rows"]:
+                    expected_held[row["code"]] += 1
+            continue
         validate_flow_rows(event["rows"], event["key"], event["n_target"], event["total_buy"], event["total_sell"])
         if not event.get("passed"):
             for row in event["rows"]:
                 expected_flows[row["code"]] += row["flow_total"]
     for code, value in flows.get("by_stock", {}).items():
-        require(abs(sum(e["flow"] for e in value["events"]) - value["total"]) <= .051,
-                f"{code}: 종목별 합산 수급 불일치")
+        if value["total"] is None:
+            require(not value["events"] and value.get("held_count", 0) > 0,
+                    f"{code}: 알려진 매매가 없는 HOLD만 null 합계 허용")
+        else:
+            require(abs(sum(e["flow"] for e in value["events"]) - value["total"]) <= .051,
+                    f"{code}: 종목별 합산 수급 불일치")
     semi = artifacts["krx_semi_rebal"]
     require(semi.get("data_through") == a["last_daily"], "KRX 반도체 기준일이 분석과 다름; 재계산 필요")
     require(bool(semi.get("scenarios")), "KRX 반도체 시나리오 누락")
     for key, scenario in semi["scenarios"].items():
+        if scenario.get("availability") == "hold":
+            require(bool(scenario.get("hold_reasons")), f"krx_semi/{key}: HOLD 사유 없음")
+            for field in ("adds", "dels", "n_selected", "total_buy_eok", "total_sell_eok"):
+                require(scenario.get(field) is None, f"krx_semi/{key}: HOLD에 확정 {field}")
+            validate_held_flow({**scenario, "n_target": None, "total_buy": None, "total_sell": None},
+                               f"krx_semi/{key}")
+            continue
         if scenario.get("unavailable"):
             require(semi.get("availability") == "pending_review" and key in ("cap10", "literal")
                     and not scenario.get("rows") and scenario.get("n_selected") is None and scenario.get("reason"),
@@ -155,15 +188,25 @@ def validate_artifacts(artifacts, now=None):
         validate_flow_rows(scenario["rows"], f"krx_semi/{key}", scenario["n_selected"],
                            scenario["total_buy_eok"], scenario["total_sell_eok"])
     if semi.get("availability") == "pending_review":
-        warnings.append("KRX 반도체: 다음 심사기간 시작 전; 현재 구성 유지 가정으로 수급 계산")
+        warnings.append("KRX 반도체: 다음 심사기간 시작 전; 시나리오별 HOLD·가정 확인")
     if parse_date(semi["expiry"]) >= generated:
         for row in semi["scenarios"]["current"]["rows"]:
+            if semi["scenarios"]["current"].get("availability") == "hold":
+                expected_held[row["code"]] += 1
+                continue
             if row["flow_total"]:
                 expected_flows[row["code"]] += row["flow_total"]
-    require(set(expected_flows) == set(flows.get("by_stock", {})), "종목별 합산 수급의 종목 누락/중복")
+    require(set(expected_flows) | set(expected_held) == set(flows.get("by_stock", {})), "종목별 합산 수급의 종목 누락/중복")
     for code, expected in expected_flows.items():
         require(abs(expected - flows["by_stock"][code]["total"]) <= .051,
                 f"{code}: 이벤트와 종목별 합산 수급이 다름")
+    for code, expected in expected_held.items():
+        item = flows["by_stock"][code]
+        require(item.get("held_count") == expected and len(item.get("held_events", [])) == expected
+                and item.get("complete") is False, f"{code}: HOLD 합산 범위가 숨겨짐")
+        if code not in expected_flows:
+            require(item["total"] is None and item.get("known_total") is None,
+                    f"{code}: HOLD를 0원 합계로 변환함")
     return warnings
 
 

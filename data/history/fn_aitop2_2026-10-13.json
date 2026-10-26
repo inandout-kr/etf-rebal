@@ -1,0 +1,409 @@
+{
+ "key": "fn_aitop2",
+ "name": "FnGuide AI반도체 TOP2+ (KODEX)",
+ "apply": "2026-10-13",
+ "apply_start": "2026-10-13",
+ "trade_date": "2026-10-12",
+ "settle_date": "2026-10-12",
+ "fix": "2026-10-08 종가 기준(일정 규칙)",
+ "rules": "목표 구성: 구성종목 변경 없음 가정 · ML 키워드 선정은 재현 불가 → 종목 변경 미반영. 시총 상위2 각 25% 고정, 그외 유동시총 가중·15% 실링(투자설명서)",
+ "proxy_etf": "395160",
+ "snapshot": {
+  "generated": "2026-10-12 08:15",
+  "saved": "2026-10-12 08:16",
+  "pdf_date": "2026-10-08",
+  "data_through": null,
+  "pre_trade": true
+ },
+ "etfs": [
+  {
+   "code": "395160",
+   "name": "KODEX AI반도체TOP2플러스",
+   "aum_eok": 42127.0,
+   "notional_eok": 42127
+  }
+ ],
+ "notional_total": 42127,
+ "pdf_rows": {
+  "005930": 25.35,
+  "000660": 22.92,
+  "402340": 22.02,
+  "009150": 19.75,
+  "042700": 2.63,
+  "007660": 1.6,
+  "058470": 1.02,
+  "000990": 0.99,
+  "403870": 0.97,
+  "319660": 0.66,
+  "095340": 0.47,
+  "131970": 0.34,
+  "036540": 0.2,
+  "101490": 0.2,
+  "195870": 0.16
+ },
+ "default_scenario": "base",
+ "scenarios": {
+  "base": {
+   "desc": "공식 가중·캡 규칙 적용 예측",
+   "adds": [],
+   "dels": [],
+   "total_buy": 5310.9,
+   "total_sell": -5310.9,
+   "rows": [
+    {
+     "code": "402340",
+     "name": "SK스퀘어",
+     "status": "유지",
+     "w_cur": 22.18,
+     "w_target": 15.0,
+     "delta": -7.18,
+     "flow_total": -3024.6,
+     "adv_mult": 0.5443748052798076,
+     "capped": true,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": -3024.6
+     }
+    },
+    {
+     "code": "009150",
+     "name": "삼성전기",
+     "status": "유지",
+     "w_cur": 19.893,
+     "w_target": 15.0,
+     "delta": -4.893,
+     "flow_total": -2061.4,
+     "adv_mult": 0.25320605287737036,
+     "capped": true,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": -2061.4
+     }
+    },
+    {
+     "code": "042700",
+     "name": "한미반도체",
+     "status": "유지",
+     "w_cur": 2.649,
+     "w_target": 5.693,
+     "delta": 3.044,
+     "flow_total": 1282.2,
+     "adv_mult": 0.7908731331577286,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": 1282.2
+     }
+    },
+    {
+     "code": "000660",
+     "name": "SK하이닉스",
+     "status": "유지",
+     "w_cur": 23.086,
+     "w_target": 25.0,
+     "delta": 1.914,
+     "flow_total": 806.2,
+     "adv_mult": 0.014943062035828288,
+     "capped": false,
+     "fixed": true,
+     "flow_by_etf": {
+      "395160": 806.2
+     }
+    },
+    {
+     "code": "007660",
+     "name": "이수페타시스",
+     "status": "유지",
+     "w_cur": 1.612,
+     "w_target": 3.463,
+     "delta": 1.852,
+     "flow_total": 780.0,
+     "adv_mult": 0.8346190696908948,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": 780.0
+     }
+    },
+    {
+     "code": "058470",
+     "name": "리노공업",
+     "status": "유지",
+     "w_cur": 1.027,
+     "w_target": 2.208,
+     "delta": 1.18,
+     "flow_total": 497.3,
+     "adv_mult": 0.6600334142127227,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": 497.3
+     }
+    },
+    {
+     "code": "000990",
+     "name": "DB하이텍",
+     "status": "유지",
+     "w_cur": 0.997,
+     "w_target": 2.143,
+     "delta": 1.146,
+     "flow_total": 482.6,
+     "adv_mult": 0.5304463133922815,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": 482.6
+     }
+    },
+    {
+     "code": "403870",
+     "name": "HPSP",
+     "status": "유지",
+     "w_cur": 0.977,
+     "w_target": 2.1,
+     "delta": 1.123,
+     "flow_total": 472.9,
+     "adv_mult": 0.34659378003426183,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": 472.9
+     }
+    },
+    {
+     "code": "319660",
+     "name": "피에스케이",
+     "status": "유지",
+     "w_cur": 0.665,
+     "w_target": 1.429,
+     "delta": 0.764,
+     "flow_total": 321.8,
+     "adv_mult": 0.6383756743456417,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": 321.8
+     }
+    },
+    {
+     "code": "095340",
+     "name": "ISC",
+     "status": "유지",
+     "w_cur": 0.473,
+     "w_target": 1.017,
+     "delta": 0.544,
+     "flow_total": 229.1,
+     "adv_mult": 0.709823185917347,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": 229.1
+     }
+    },
+    {
+     "code": "005930",
+     "name": "삼성전자",
+     "status": "유지",
+     "w_cur": 25.534,
+     "w_target": 25.0,
+     "delta": -0.534,
+     "flow_total": -224.9,
+     "adv_mult": 0.005273670358750089,
+     "capped": false,
+     "fixed": true,
+     "flow_by_etf": {
+      "395160": -224.9
+     }
+    },
+    {
+     "code": "131970",
+     "name": "두산테스나",
+     "status": "유지",
+     "w_cur": 0.342,
+     "w_target": 0.736,
+     "delta": 0.393,
+     "flow_total": 165.8,
+     "adv_mult": 0.4259720952706183,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": 165.8
+     }
+    },
+    {
+     "code": "101490",
+     "name": "에스앤에스텍",
+     "status": "유지",
+     "w_cur": 0.201,
+     "w_target": 0.433,
+     "delta": 0.231,
+     "flow_total": 97.5,
+     "adv_mult": 0.7508026084702943,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": 97.5
+     }
+    },
+    {
+     "code": "036540",
+     "name": "SFA반도체",
+     "status": "유지",
+     "w_cur": 0.201,
+     "w_target": 0.433,
+     "delta": 0.231,
+     "flow_total": 97.5,
+     "adv_mult": 0.12297273714974699,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": 97.5
+     }
+    },
+    {
+     "code": "195870",
+     "name": "해성디에스",
+     "status": "유지",
+     "w_cur": 0.161,
+     "w_target": 0.346,
+     "delta": 0.185,
+     "flow_total": 78.0,
+     "adv_mult": 0.7774706485375315,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "395160": 78.0
+     }
+    }
+   ]
+  }
+ },
+ "actual": {
+  "pdf_date": "2026-10-12",
+  "adds": [],
+  "dels": [],
+  "rows": {
+   "009150": {
+    "name": "삼성전기",
+    "w_old": 20.112,
+    "w_new": 19.97,
+    "delta": -0.142,
+    "flow": -59.9
+   },
+   "000660": {
+    "name": "SK하이닉스",
+    "w_old": 23.169,
+    "w_new": 23.0,
+    "delta": -0.169,
+    "flow": -71.3
+   },
+   "319660": {
+    "name": "피에스케이",
+    "w_old": 0.674,
+    "w_new": 0.67,
+    "delta": -0.004,
+    "flow": -1.8
+   },
+   "095340": {
+    "name": "ISC",
+    "w_old": 0.478,
+    "w_new": 0.48,
+    "delta": 0.002,
+    "flow": 0.9
+   },
+   "101490": {
+    "name": "에스앤에스텍",
+    "w_old": 0.197,
+    "w_new": 0.19,
+    "delta": -0.007,
+    "flow": -2.8
+   },
+   "195870": {
+    "name": "해성디에스",
+    "w_old": 0.16,
+    "w_new": 0.15,
+    "delta": -0.01,
+    "flow": -4.2
+   },
+   "000990": {
+    "name": "DB하이텍",
+    "w_old": 0.995,
+    "w_new": 0.99,
+    "delta": -0.005,
+    "flow": -1.9
+   },
+   "005930": {
+    "name": "삼성전자",
+    "w_old": 25.661,
+    "w_new": 25.47,
+    "delta": -0.191,
+    "flow": -80.4
+   },
+   "403870": {
+    "name": "HPSP",
+    "w_old": 0.97,
+    "w_new": 0.96,
+    "delta": -0.01,
+    "flow": -4.1
+   },
+   "402340": {
+    "name": "SK스퀘어",
+    "w_old": 21.848,
+    "w_new": 21.68,
+    "delta": -0.168,
+    "flow": -70.8
+   },
+   "131970": {
+    "name": "두산테스나",
+    "w_old": 0.356,
+    "w_new": 0.35,
+    "delta": -0.006,
+    "flow": -2.4
+   },
+   "042700": {
+    "name": "한미반도체",
+    "w_old": 2.592,
+    "w_new": 2.57,
+    "delta": -0.022,
+    "flow": -9.1
+   },
+   "007660": {
+    "name": "이수페타시스",
+    "w_old": 1.632,
+    "w_new": 1.62,
+    "delta": -0.012,
+    "flow": -5.0
+   },
+   "036540": {
+    "name": "SFA반도체",
+    "w_old": 0.198,
+    "w_new": 0.2,
+    "delta": 0.002,
+    "flow": 0.8
+   },
+   "058470": {
+    "name": "리노공업",
+    "w_old": 0.96,
+    "w_new": 0.95,
+    "delta": -0.01,
+    "flow": -4.0
+   }
+  },
+  "total_buy": 1.7,
+  "total_sell": -317.7,
+  "by_scenario": {
+   "base": {
+    "adds_hit": [],
+    "adds_fp": [],
+    "adds_miss": [],
+    "dels_hit": [],
+    "dels_fp": [],
+    "dels_miss": [],
+    "n_pairs": 15,
+    "dir_hit": 0.3333333333333333,
+    "corr": 0.5686735927333151
+   }
+  },
+  "computed": "2026-10-13 08:14"
+ }
+}

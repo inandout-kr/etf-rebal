@@ -1,0 +1,294 @@
+{
+ "key": "fn_aitop2_sol",
+ "name": "FnGuide AI반도체 TOP2 플러스 (SOL)",
+ "apply": "2026-10-13",
+ "apply_start": "2026-10-13",
+ "trade_date": "2026-10-12",
+ "settle_date": "2026-10-12",
+ "fix": "2026-10-08 종가 기준(일정 규칙)",
+ "rules": "목표 구성: 구성종목 변경 없음 가정 · SOL 상품 기초지수(PR)는 구성종목 수가 달라 별도 계산. 종목 변경 미반영, TOP2 25%·그외 15% 실링",
+ "proxy_etf": "0167A0",
+ "snapshot": {
+  "generated": "2026-10-12 08:15",
+  "saved": "2026-10-12 08:16",
+  "pdf_date": "2026-10-08",
+  "data_through": null,
+  "pre_trade": true
+ },
+ "etfs": [
+  {
+   "code": "0167A0",
+   "name": "SOL AI반도체TOP2플러스",
+   "aum_eok": 57749.0,
+   "notional_eok": 57749
+  }
+ ],
+ "notional_total": 57749,
+ "pdf_rows": {
+  "005930": 24.14,
+  "000660": 20.99,
+  "009150": 15.97,
+  "402340": 12.66,
+  "007660": 7.78,
+  "353200": 5.96,
+  "240810": 4.86,
+  "319660": 3.22,
+  "095610": 2.14,
+  "089970": 1.7
+ },
+ "default_scenario": "base",
+ "scenarios": {
+  "base": {
+   "desc": "공식 가중·캡 규칙 적용 예측",
+   "adds": [],
+   "dels": [],
+   "total_buy": 2660.3,
+   "total_sell": -2660.5,
+   "rows": [
+    {
+     "code": "000660",
+     "name": "SK하이닉스",
+     "status": "유지",
+     "w_cur": 21.112,
+     "w_target": 25.0,
+     "delta": 3.888,
+     "flow_total": 2245.0,
+     "adv_mult": 0.04161093187864076,
+     "capped": false,
+     "fixed": true,
+     "flow_by_etf": {
+      "0167A0": 2245.0
+     }
+    },
+    {
+     "code": "402340",
+     "name": "SK스퀘어",
+     "status": "유지",
+     "w_cur": 12.734,
+     "w_target": 11.563,
+     "delta": -1.171,
+     "flow_total": -676.1,
+     "adv_mult": 0.1216810979161534,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "0167A0": -676.1
+     }
+    },
+    {
+     "code": "009150",
+     "name": "삼성전기",
+     "status": "유지",
+     "w_cur": 16.063,
+     "w_target": 15.0,
+     "delta": -1.063,
+     "flow_total": -614.0,
+     "adv_mult": 0.07541600195264024,
+     "capped": true,
+     "fixed": false,
+     "flow_by_etf": {
+      "0167A0": -614.0
+     }
+    },
+    {
+     "code": "007660",
+     "name": "이수페타시스",
+     "status": "유지",
+     "w_cur": 7.825,
+     "w_target": 7.106,
+     "delta": -0.719,
+     "flow_total": -415.5,
+     "adv_mult": 0.4445473923782167,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "0167A0": -415.5
+     }
+    },
+    {
+     "code": "005930",
+     "name": "삼성전자",
+     "status": "유지",
+     "w_cur": 24.281,
+     "w_target": 25.0,
+     "delta": 0.719,
+     "flow_total": 415.3,
+     "adv_mult": 0.00973901640282248,
+     "capped": false,
+     "fixed": true,
+     "flow_by_etf": {
+      "0167A0": 415.3
+     }
+    },
+    {
+     "code": "353200",
+     "name": "대덕전자",
+     "status": "유지",
+     "w_cur": 5.995,
+     "w_target": 5.444,
+     "delta": -0.551,
+     "flow_total": -318.3,
+     "adv_mult": 0.2473390196724802,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "0167A0": -318.3
+     }
+    },
+    {
+     "code": "240810",
+     "name": "원익IPS",
+     "status": "유지",
+     "w_cur": 4.888,
+     "w_target": 4.439,
+     "delta": -0.449,
+     "flow_total": -259.5,
+     "adv_mult": 0.17304647167967885,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "0167A0": -259.5
+     }
+    },
+    {
+     "code": "319660",
+     "name": "피에스케이",
+     "status": "유지",
+     "w_cur": 3.239,
+     "w_target": 2.941,
+     "delta": -0.298,
+     "flow_total": -172.0,
+     "adv_mult": 0.34116024305469655,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "0167A0": -172.0
+     }
+    },
+    {
+     "code": "095610",
+     "name": "테스",
+     "status": "유지",
+     "w_cur": 2.152,
+     "w_target": 1.955,
+     "delta": -0.198,
+     "flow_total": -114.3,
+     "adv_mult": 0.20558508875809334,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "0167A0": -114.3
+     }
+    },
+    {
+     "code": "089970",
+     "name": "브이엠",
+     "status": "유지",
+     "w_cur": 1.71,
+     "w_target": 1.553,
+     "delta": -0.157,
+     "flow_total": -90.8,
+     "adv_mult": 0.23216877559425111,
+     "capped": false,
+     "fixed": false,
+     "flow_by_etf": {
+      "0167A0": -90.8
+     }
+    }
+   ]
+  }
+ },
+ "actual": {
+  "pdf_date": "2026-10-12",
+  "adds": [],
+  "dels": [],
+  "rows": {
+   "009150": {
+    "name": "삼성전기",
+    "w_old": 16.179,
+    "w_new": 16.09,
+    "delta": -0.089,
+    "flow": -51.5
+   },
+   "000660": {
+    "name": "SK하이닉스",
+    "w_old": 21.109,
+    "w_new": 20.98,
+    "delta": -0.129,
+    "flow": -74.6
+   },
+   "319660": {
+    "name": "피에스케이",
+    "w_old": 3.272,
+    "w_new": 3.25,
+    "delta": -0.022,
+    "flow": -12.9
+   },
+   "353200": {
+    "name": "대덕전자",
+    "w_old": 5.848,
+    "w_new": 5.81,
+    "delta": -0.038,
+    "flow": -21.8
+   },
+   "240810": {
+    "name": "원익IPS",
+    "w_old": 5.012,
+    "w_new": 4.99,
+    "delta": -0.022,
+    "flow": -12.6
+   },
+   "005930": {
+    "name": "삼성전자",
+    "w_old": 24.311,
+    "w_new": 24.16,
+    "delta": -0.151,
+    "flow": -86.9
+   },
+   "402340": {
+    "name": "SK스퀘어",
+    "w_old": 12.497,
+    "w_new": 12.42,
+    "delta": -0.077,
+    "flow": -44.2
+   },
+   "007660": {
+    "name": "이수페타시스",
+    "w_old": 7.894,
+    "w_new": 7.85,
+    "delta": -0.044,
+    "flow": -25.6
+   },
+   "089970": {
+    "name": "브이엠",
+    "w_old": 1.657,
+    "w_new": 1.65,
+    "delta": -0.007,
+    "flow": -4.1
+   },
+   "095610": {
+    "name": "테스",
+    "w_old": 2.221,
+    "w_new": 2.21,
+    "delta": -0.011,
+    "flow": -6.4
+   }
+  },
+  "total_buy": 0,
+  "total_sell": -340.6,
+  "by_scenario": {
+   "base": {
+    "adds_hit": [],
+    "adds_fp": [],
+    "adds_miss": [],
+    "dels_hit": [],
+    "dels_fp": [],
+    "dels_miss": [],
+    "n_pairs": 10,
+    "dir_hit": 0.8,
+    "corr": -0.5296982908539334
+   }
+  },
+  "computed": "2026-10-13 08:14"
+ }
+}

@@ -29,14 +29,23 @@ def daily_snapshot(analysis, flows):
                                    "code": row["code"], "name": row["name"]})
     return {"date": parse_date(analysis["last_daily"]).isoformat(), "generated": analysis["generated"],
             "candidates": candidates,
-            "flows": {code: {"name": row["name"], "total": row["total"]}
+            "flows": {code: {"name": row["name"], "total": row["total"],
+                             "complete": row.get("complete"), "held_count": row.get("held_count"),
+                             "known_total": row.get("known_total"),
+                             "known_coverage": sorted([e.get("key") or e.get("index") or "", e.get("apply") or ""]
+                                                      for e in row.get("events", [])),
+                             "held_coverage": sorted([e.get("key") or e.get("index") or "", e.get("apply") or ""]
+                                                     for e in row.get("held_events", [])),
+                             "coverage_known": "complete" in row and "held_count" in row
+                                and all((e.get("key") or e.get("index")) and e.get("apply")
+                                        for e in row.get("events", []) + row.get("held_events", []))}
                       for code, row in (flows or {}).get("by_stock", {}).items()}}
 
 
 def compare_snapshots(current, previous=None):
     result = {"status": "ready" if previous else "baseline_created",
               "baseline_date": previous["date"] if previous else None,
-              "current_date": current["date"], "adds": [], "flows": []}
+              "current_date": current["date"], "adds": [], "flows": [], "flow_comparison_holds": []}
     if previous is None:
         return result
     before = {(r["key"], r["code"]): r for r in previous["candidates"]}
@@ -46,13 +55,26 @@ def compare_snapshots(current, previous=None):
         for key in sorted(keys):
             result["adds"].append({k: source[key][k] for k in ("index", "code", "name")} | {"change": change})
     for code in sorted(previous["flows"].keys() | current["flows"].keys()):
-        prior = previous["flows"].get(code, {})
-        latest = current["flows"].get(code, {})
-        before_value, after_value = prior.get("total", 0), latest.get("total", 0)
+        prior = previous["flows"].get(code)
+        latest = current["flows"].get(code)
+        hold = None
+        if prior is None or latest is None:
+            hold = "한쪽 관측 없음 (0원으로 대체하지 않음)"
+        elif prior.get("total") is None or latest.get("total") is None:
+            hold = "수급 HOLD · 숫자 변화 비교 보류"
+        elif not prior.get("coverage_known") or not latest.get("coverage_known"):
+            hold = "이전 스냅샷의 계산 범위 확인 불가"
+        elif any(prior.get(k) != latest.get(k) for k in ("known_coverage", "held_coverage", "complete")):
+            hold = "계산 가능한 이벤트·HOLD 범위가 달라 비교 보류"
+        if hold:
+            result["flow_comparison_holds"].append({"code": code, "name": (latest or prior)["name"], "reason": hold})
+            continue
+        before_value, after_value = prior["total"], latest["total"]
         delta = round(after_value - before_value, 1)
         if delta:
             result["flows"].append({"code": code, "name": latest.get("name", prior.get("name")),
-                                    "before": before_value, "after": after_value, "delta": delta})
+                                    "before": before_value, "after": after_value, "delta": delta,
+                                    "partial": latest.get("complete") is False})
     result["flows"].sort(key=lambda r: (-abs(r["delta"]), r["code"]))
     return result
 
@@ -101,14 +123,18 @@ def main():
     if semi:
         keep = ["code", "name", "market", "status", "is_cur", "in_midlarge", "gics_excluded", "avg_mcap", "avg_mcap_2025", "avg_trdval", "mcap_rank", "cum_share",
                 "trd_rank", "liq_ok", "mktcap_now", "fif", "fif_src", "w_cur_adj", "w_target", "delta", "capped", "flow_by_etf", "flow_total", "adv20", "adv_mult", "w_cur_etf"]
+        keep += ["availability", "hold_reasons", "official_ffr", "cap_factor", "relative_coefficient", "relative_coefficient_source"]
         for sc in semi["scenarios"].values():
-            sc["rows"] = [{k: r.get(k) for k in keep if r.get(k) is not None} for r in sc["rows"] if r.get("is_cur") or r.get("in_midlarge")]
+            # Other tracked ETFs can hold a sale outside the proxy and new universe.
+            # Preserve every engine row, including null-valued HOLD fields.
+            sc["rows"] = [{k: r.get(k) for k in keep if k in r} for r in sc["rows"]]
     payload = {"analysis": a, "etfs": etfs, "kb": kb, "members": members, "semi": semi, "flows": flows, "backtest": backtest, "history": history, "changes": changes,
                "proxy": {k: {"etf": v["etf_code"], "date": v["date"], "n": len(v["rows"])} for k, v in hold.items()}}
     html = (ROOT / "template.html").read_text(encoding="utf-8")
     if html.count("/*__DATA__*/null") != 1:
         raise ValueError("사이트 템플릿 데이터 위치가 없거나 중복됨")
-    source_paths = list(DATA.glob("history/*.json")) + [DATA / f"{name}.json" for name in artifacts] + [ROOT / "template.html"]
+    source_paths = (list(DATA.glob("history/*.json")) + [DATA / f"{name}.json" for name in artifacts]
+                    + list(DATA.glob("krics*.json")) + list(DATA.glob("official*.json")) + [ROOT / "template.html"])
     payload["_build"] = {"sources": {str(p.relative_to(ROOT)).replace("\\", "/"): hashlib.sha256(p.read_bytes()).hexdigest()
                                      for p in sorted(source_paths)}}
     js = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).replace("</", "<\\/")
