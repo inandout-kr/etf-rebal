@@ -351,8 +351,8 @@ function renderDash(){
     </div>
   </div>
   <div class="grid g2" style="margin-top:14px">
-    <div class="card"><div class="eyebrow">플로우 하이라이트</div><h2>패시브 매수 상위</h2><p class="sub">남은 정기변경 전체 · 종목·이벤트 단위</p><ul class="list">${buys.map(hlRow).join('')}</ul></div>
-    <div class="card"><div class="eyebrow">플로우 하이라이트</div><h2>패시브 매도 상위</h2><p class="sub">${D.semi?'KRX 반도체는 시나리오 A 기준':'남은 정기변경 전체 · 종목·이벤트 단위'}</p><ul class="list">${sells.map(hlRow).join('')}</ul></div>
+    <div class="card"><div class="eyebrow">플로우 하이라이트</div><h2>패시브 매수 상위</h2><p class="sub">계산 가능한 이벤트만 · HOLD 제외 · 종목·이벤트 단위</p><ul class="list">${buys.map(hlRow).join('')}</ul></div>
+    <div class="card"><div class="eyebrow">플로우 하이라이트</div><h2>패시브 매도 상위</h2><p class="sub">계산 가능한 이벤트만 · HOLD 제외 · 종목·이벤트 단위</p><ul class="list">${sells.map(hlRow).join('')}</ul></div>
   </div>`;
 }
 

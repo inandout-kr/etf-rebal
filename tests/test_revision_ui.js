@@ -48,6 +48,8 @@ ui.context.renderAdhoc();
 assert.match(ui.elements.get('tab-adhoc').innerHTML,/첫 15완료거래일/);
 assert(!ui.elements.get('tab-adhoc').innerHTML.includes('해당 산업군 예비종목 1순위 편입'));
 ui.context.renderDash();ui.context.renderQuality();
+assert.match(ui.elements.get('tab-dash').innerHTML,/계산 가능한 이벤트만 · HOLD 제외/);
+assert(!ui.elements.get('tab-dash').innerHTML.includes('KRX 반도체는 시나리오 A 기준'));
 assert.match(ui.elements.get('tab-dash').innerHTML,/KRICS-A:/);
 assert.match(ui.elements.get('krx-transition').innerHTML,/적용 시점 HOLD/);
 
