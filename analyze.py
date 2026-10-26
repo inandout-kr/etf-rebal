@@ -7,6 +7,7 @@ FnGuide TOP-N 계열·MSCI·특례편입·캡 트리거 모니터링 결과를 d
 
 사용: python analyze.py
 """
+import copy
 import json
 import math
 import sqlite3
@@ -16,10 +17,11 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from classification_scenarios import classification_comparison, load_mapping
+from classification_scenarios import classification_comparison, gics_smallcap_comparison, load_mapping
 from ipo_eligibility import assess_first15
 from calendar_events import CALENDAR_YEARS, next_cycle, review_availability, review_windows, events_upcoming
 from market_dates import anchor_stocks, completed_session_date, current_universe, korea_now, latest_completed_date, usable_fx
+from security_types import metadata_quality
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).parent
@@ -413,6 +415,9 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, w
     cur = {r["code"] for r in holdings[cfg["proxy"]]["rows"] if r.get("code")}
     curw = {r["code"]: r.get("weight") for r in holdings[cfg["proxy"]]["rows"] if r.get("code")}
     univ = []
+    review_rows = []
+    missing_review_data = []
+    excluded_gics_classification = []
     excluded = []
     for code, st in stocks.items():
         if st["market"] != cfg["market"] or not st["is_common"]:
@@ -425,22 +430,27 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, w
                 excluded.append({"code": code, "name": st["name"], "why": why, "is_cur": True})
             continue
         if not ps or not ps["avg_mcap"] or not ps["avg_trdval"]:
+            missing_review_data.append({"code": code, "name": st["name"],
+                                        "why": "심사기간 시총·거래대금 관측 없음 또는 0; 대체값 생성 안 함"})
             continue
         sec, src = gics_sector(st, sector_etf_map if key == "kospi200" else {}, scheme=key)
-        if not sec:
-            if is_cur:
-                excluded.append({"code": code, "name": st["name"], "why": "산업군 미분류(WICS 없음)", "is_cur": True})
-            continue
-        univ.append({"code": code, "name": st["name"], "sector": sec, "sector_src": src, "avg_mcap": ps["avg_mcap"],
+        row = {"code": code, "name": st["name"], "sector": sec, "sector_src": src, "avg_mcap": ps["avg_mcap"],
                      "avg_trdval": ps["avg_trdval"], "n_days": ps["n"], "is_cur": is_cur, "cur_weight": curw.get(code),
                       "review_start": ps["first"], "review_end": ps["last"], "review_events": ps.get("review_events", []),
                       "market_mcap_rank": market_ranks.get(code),
                       "mktcap_now": st["mktcap"], "close": st["close"], "listing_date": st.get("listing_date"),
                       "price_as_of": st.get("price_as_of"), "price_status": st.get("price_status"), "universe_as_of": st.get("universe_as_of"),
                      "fif": FIF.get(code), "ret_period": ps.get("ret_period"),
-                     "risk": ("급등(부적합 판정 위험)" if (ps.get("ret_period") or 0) >= 1.5 else None)})
+                      "risk": ("급등(부적합 판정 위험)" if (ps.get("ret_period") or 0) >= 1.5 else None)}
+        review_rows.append(row)
+        if not sec:
+            excluded_gics_classification.append({"code": code, "name": st["name"], "why": "GICS/WICS 분류 없음"})
+            if is_cur:
+                excluded.append({"code": code, "name": st["name"], "why": "산업군 미분류(WICS 없음)", "is_cur": True})
+            continue
+        univ.append(copy.deepcopy(row))
     recent = recent_mcap_stats(con, 15, as_of)
-    for u in univ:
+    for u in review_rows + univ:
         u["mcap15"] = recent.get(u["code"], {}).get("avg_mcap")
         u["mcap15_n_days"] = recent.get(u["code"], {}).get("n", 0)
     selection = select_krx_rows(univ, cur, cfg)
@@ -450,6 +460,9 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, w
         "classification": {"scheme": "GICS", "status": "reference_pending_krics", "expected_scheme": "KRICS",
                            "effective_date_status": "HOLD", "official_result": False},
         "excluded_current": excluded,
+        "missing_review_data": missing_review_data,
+        "excluded_gics_classification": excluded_gics_classification,
+        "_classification_review_rows": review_rows,
         **selection,
     }
 
@@ -687,6 +700,8 @@ def main():
     if universe_quality["status"] == "unavailable":
         raise ValueError("현재 유니버스 기록을 확인할 수 없습니다. 이전 분석을 보존하고 검증된 수집을 기다립니다.")
     stocks = anchor_stocks(con, stocks, as_of, current=True, metadata=meta)
+    security_quality = metadata_quality(DATA / "security_types.json", stocks, universe_codes, now,
+                                        meta.get("security_types_quality"))
     windows = review_windows(today)
     previous_path = DATA / "analysis.json"
     previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path.exists() else {}
@@ -708,8 +723,11 @@ def main():
     kq150 = run_krx_index(con, stocks, holdings, "kosdaq150", cfg_kq150, {}, as_of, windows["kosdaq150"])
     krics_mapping, krics_error = load_mapping(DATA / "krics_mapping.json")
     for index_result, config in ((k200, cfg_k200), (kq150, cfg_kq150)):
+        review_rows = index_result.pop("_classification_review_rows")
         index_result["classification_scenarios"] = classification_comparison(
-            index_result, config, krics_mapping, select_krx_rows, load_error=krics_error)
+            index_result, config, krics_mapping, select_krx_rows, load_error=krics_error, review_rows=review_rows)
+    kq150["small_cap_policy"] = "applied"
+    kq150["smallcap_scenarios"] = gics_smallcap_comparison(kq150, cfg_kq150, select_krx_rows)
     k100 = run_kospi100_50(k200, holdings)
 
     top_cycle = next_cycle("fn_top10", today)
@@ -748,11 +766,13 @@ def main():
             warnings.append(f"{item['name']}: 다음 심사기간 시작 전이므로 편출입 예측을 대기합니다.")
     if today.year not in CALENDAR_YEARS or any(w["calendar_coverage"] == "partial" for w in (windows["kospi200"], top_cycle, semi_cycle)) or (today + timedelta(days=300)).year not in CALENDAR_YEARS:
         warnings.append("일부 일정은 등록 휴장일 범위(2026~2027)를 벗어납니다. 공식 거래소 일정 확인이 필요합니다.")
+    warnings.extend(security_quality["warnings"])
     result = {
         "generated": now.strftime("%Y-%m-%d %H:%M"),
         "market_updated": meta.get("updated"), "last_daily": as_of, "usdkrw": usdkrw,
         "data_quality": {"status": "warning" if warnings else "ok", "warnings": warnings,
                          "as_of": datetime.strptime(as_of, "%Y%m%d").date().isoformat(), "fx": fx_quality,
+                         "security_types": security_quality,
                          "universe": {k: v for k, v in universe_quality.items() if k != "codes"}
                                      | {"scope": "current_snapshot", "price_as_of": as_of}},
         "stock_data": {c: {"name": s["name"], "price_as_of": s["price_as_of"], "price_status": s["price_status"],

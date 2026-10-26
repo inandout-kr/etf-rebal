@@ -144,6 +144,32 @@ def resolve_membership(cfg, analysis, current, inputs):
             "classification": (result.get("classification") or {}).get("scheme"), "hold_reasons": []}
 
 
+def krx_variants(result):
+    """Two independent scenario axes; alternatives never enter the aggregate twice."""
+    variants = {}
+    for policy, value in result.get("smallcap_scenarios", {}).items():
+        variants[f"GICS:{policy}"] = value
+    comparison = result.get("classification_scenarios", {})
+    if comparison.get("status") == "ready":
+        for policy, scenarios in comparison.get("smallcap_scenarios", {}).items():
+            for interpretation, value in scenarios.items():
+                variants[f"{interpretation}:{policy}"] = value
+    return variants
+
+
+def variant_membership(result, scenario):
+    selected = [r["code"] for r in result["all"]
+                if (r.get("status") or "").startswith(("유지", "신규편입"))]
+    scheme, policy = scenario.split(":", 1)
+    held = scheme != "GICS"
+    return {"codes": selected, "status": "hold" if held else "estimated",
+            "basis": f"{'기존 GICS' if not held else 'KRICS-' + scheme} · 300위 재량 {'적용' if policy == 'applied' else '미적용'} · 공식 확정 아님",
+            "classification": "GICS" if not held else "KRICS", "scenario_id": scenario,
+            "small_cap_policy": policy,
+            "hold_reasons": [reason("krics_weight_inputs_unverified",
+                "KRICS 분류 적용 시점과 공식 유동주식비율·가중 입력 확인 전 매매 추정은 HOLD입니다.")] if held else []}
+
+
 def main():
     con = sqlite3.connect((DATA / "market.sqlite").as_uri() + "?mode=ro", uri=True)
     con.row_factory = sqlite3.Row
@@ -184,6 +210,18 @@ def main():
             require_current_prices(stocks, membership["codes"], cfg["name"])
         event = calculate_event(cfg, membership, stocks, holdings, etf_master, analysis, adv, prices_at, cfg["cycle"], supplied)
         event["passed"] = event_has_passed(cfg["cycle"], now)
+        if cfg["key"] == "kosdaq150":
+            scenario_flows = {}
+            for scenario_id, variant in krx_variants(analysis[cfg["key"]]).items():
+                scenario_membership = variant_membership(variant, scenario_id)
+                scenario_event = calculate_event(cfg, scenario_membership, stocks, holdings, etf_master,
+                    analysis, adv, prices_at, cfg["cycle"], supplied)
+                scenario_event.update(scenario_id=scenario_id, small_cap_policy=scenario_membership["small_cap_policy"],
+                                      passed=event["passed"])
+                scenario_flows[scenario_id] = scenario_event
+            event["scenario_id"] = "GICS:applied"
+            event["small_cap_policy"] = "applied"
+            event["scenario_flows"] = scenario_flows
         out["events"].append(event)
         print(cfg["key"], event["availability"], "hold reasons", len(event["hold_reasons"]))
     aggregate = list(out["events"])

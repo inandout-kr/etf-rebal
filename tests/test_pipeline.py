@@ -302,8 +302,12 @@ class DailyChangeTests(unittest.TestCase):
 
     def test_first_day_has_no_fabricated_changes(self):
         result = compare_snapshots(self.snapshot())
-        self.assertEqual(result, {"status": "baseline_created", "baseline_date": None,
-                                 "current_date": "2026-09-10", "adds": [], "flows": [], "flow_comparison_holds": []})
+        self.assertEqual(result["status"], "baseline_created")
+        self.assertIsNone(result["baseline_date"])
+        self.assertEqual(result["current_date"], "2026-09-10")
+        self.assertEqual(result["scenario_status"], "baseline_created")
+        for field in ("adds", "flows", "flow_comparison_holds", "scenario_changes"):
+            self.assertEqual(result[field], [], field)
 
     def test_next_day_new_removed_candidates_and_signed_flow_deltas(self):
         result = compare_snapshots(self.snapshot("20260911", "000660", -20), self.snapshot())

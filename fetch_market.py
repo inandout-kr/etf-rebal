@@ -23,6 +23,7 @@ from pathlib import Path
 import requests
 
 from market_dates import completed_session_date, current_universe, latest_completed_date
+from security_types import common_decision, refresh_metadata
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).parent
@@ -30,7 +31,6 @@ DB = ROOT / "data" / "market.sqlite"
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126"}
 DAUM = {**UA, "Referer": "https://finance.daum.net/"}
 WORKERS = 6
-PREF_SUFFIX = ("우", "우B", "우C", "2우B", "3우B", "우(전환)")
 
 
 def num(s):
@@ -45,11 +45,9 @@ def num(s):
         return None
 
 
-def is_common(code, name):
-    """보통주 판별: 코드 끝자리 0 + 우선주 명칭 패턴 제외"""
-    if not code.endswith("0"):
-        return False
-    return not any(name.endswith(suf) for suf in PREF_SUFFIX)
+def is_common(code, name, market=None, metadata=None):
+    """Explicit identity-matched metadata only; None means unverified."""
+    return common_decision(code, name, market, metadata)
 
 
 def fetch_universe():
@@ -141,7 +139,7 @@ def store_daily_rows(con, code, rows, since, through=None):
     return True
 
 
-def store_universe(con, rows, observed_at):
+def store_universe(con, rows, observed_at, security_metadata=None, security_quality=None):
     """Commit validated membership with its stock rows; never delete departed history."""
     cursor = con.execute("SELECT * FROM stock")
     names = [col[0] for col in cursor.description]
@@ -150,15 +148,29 @@ def store_universe(con, rows, observed_at):
     validate_universe(rows, len(previous) or len(stocks))
     snapshot = {"version": 1, "observed_at": observed_at, "source": "Naver marketValue KOSPI/KOSDAQ",
                 "codes": sorted(u["code"] for u in rows)}
+    unverified, verified = [], 0
     with con:
         for u in rows:
+            common = is_common(u["code"], u["name"], u["market"], security_metadata)
+            if common is None:
+                common = bool(stocks.get(u["code"], {}).get("is_common", False))
+                unverified.append({"code": u["code"], "name": u["name"],
+                                   "action": "기존 DB 판정 보존" if u["code"] in stocks else "신규 종목 분류 HOLD"})
+            else:
+                verified += 1
             con.execute(
                 """INSERT INTO stock(code,name,market,is_common,close,mktcap,trdval,volume,updated) VALUES(?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(code) DO UPDATE SET name=excluded.name,market=excluded.market,is_common=excluded.is_common,
                    close=excluded.close,mktcap=excluded.mktcap,trdval=excluded.trdval,volume=excluded.volume,updated=excluded.updated""",
-                (u["code"], u["name"], u["market"], int(is_common(u["code"], u["name"])),
+                (u["code"], u["name"], u["market"], int(common),
                  u["close"], u["mktcap"], u["trdval"], u["volume"], observed_at))
         con.execute("INSERT OR REPLACE INTO meta VALUES('current_universe',?)", (json.dumps(snapshot, ensure_ascii=False),))
+        quality = dict(security_quality or {"status": "unavailable", "observed_at": None, "records": 0, "warnings": []})
+        quality.update(verified_universe_rows=verified, unverified_count=len(unverified), unverified=unverified)
+        if unverified:
+            quality["status"] = "warning"
+            quality["warnings"] = list(quality.get("warnings", [])) + [f"종목종류 메타데이터 신원·분류 미확인 {len(unverified)}개; 기존 판정 보존 또는 신규 HOLD"]
+        con.execute("INSERT OR REPLACE INTO meta VALUES('security_types_quality',?)", (json.dumps(quality, ensure_ascii=False),))
 
 
 def fetch_daily_daum(code, since):
@@ -252,7 +264,8 @@ def main():
     n_kospi = sum(1 for u in uni if u["market"] == "KOSPI")
     print(f"universe: {len(uni)} (KOSPI {n_kospi}, KOSDAQ {len(uni) - n_kospi})")
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    store_universe(con, uni, now)
+    security_metadata, security_quality = refresh_metadata(DB.parent / "security_types.json", now, requests.get)
+    store_universe(con, uni, now, security_metadata, security_quality)
 
     wics = fetch_wics()
     print(f"WICS sectors: {len(wics)}")
@@ -260,7 +273,8 @@ def main():
         con.execute("UPDATE stock SET wics_sec=?, wics_sec_name=? WHERE code=?", (sec, nm, code))
     con.commit()
 
-    codes = [u["code"] for u in uni if is_common(u["code"], u["name"])]
+    common_codes = {r[0] for r in con.execute("SELECT code FROM stock WHERE is_common=1")}
+    codes = [u["code"] for u in uni if u["code"] in common_codes]
     shares_now = {u["code"]: (u["mktcap"] / u["close"] if u["close"] else None) for u in uni}
 
     print(f"daily: {len(codes)} common stocks since {a.since} ...")

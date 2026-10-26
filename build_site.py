@@ -27,7 +27,29 @@ def daily_snapshot(analysis, flows):
             if isinstance(row, dict) and row.get("code"):
                 candidates.append({"index": result.get("name", key), "key": key,
                                    "code": row["code"], "name": row["name"]})
+    scenario_candidates = {}
+    kq = analysis.get("kosdaq150", {})
+    for policy, value in kq.get("smallcap_scenarios", {}).items():
+        scenario_candidates[f"kosdaq150:GICS:{policy}"] = {
+            "small_cap_policy": policy, "classification": "GICS",
+            "adds": [{"code": r["code"], "name": r["name"]} for r in value["adds"]],
+            "dels": [{"code": r["code"], "name": r["name"]} for r in value["dels"]]}
+    comparison = kq.get("classification_scenarios", {})
+    if comparison.get("status") == "ready":
+        for policy, scenarios in comparison.get("smallcap_scenarios", {}).items():
+            for interpretation, value in scenarios.items():
+                scenario_candidates[f"kosdaq150:{interpretation}:{policy}"] = {
+                    "small_cap_policy": policy, "classification": "KRICS", "interpretation": interpretation,
+                    "adds": [{"code": r["code"], "name": r["name"]} for r in value["adds"]],
+                    "dels": [{"code": r["code"], "name": r["name"]} for r in value["dels"]]}
+    scenario_flows = {}
+    for event in (flows or {}).get("events", []):
+        for scenario, value in event.get("scenario_flows", {}).items():
+            scenario_flows[f"{event['key']}:{scenario}"] = {
+                "availability": value["availability"], "total_buy": value["total_buy"],
+                "total_sell": value["total_sell"], "hold_reasons": value.get("hold_reasons", [])}
     return {"date": parse_date(analysis["last_daily"]).isoformat(), "generated": analysis["generated"],
+            "scenario_candidates": scenario_candidates, "scenario_flows": scenario_flows,
             "candidates": candidates,
             "flows": {code: {"name": row["name"], "total": row["total"],
                              "complete": row.get("complete"), "held_count": row.get("held_count"),
@@ -45,9 +67,19 @@ def daily_snapshot(analysis, flows):
 def compare_snapshots(current, previous=None):
     result = {"status": "ready" if previous else "baseline_created",
               "baseline_date": previous["date"] if previous else None,
-              "current_date": current["date"], "adds": [], "flows": [], "flow_comparison_holds": []}
+              "current_date": current["date"], "adds": [], "flows": [], "flow_comparison_holds": [],
+              "scenario_changes": [], "scenario_status": "ready" if previous and "scenario_candidates" in previous else "baseline_created"}
     if previous is None:
         return result
+    for scenario in sorted(current.get("scenario_candidates", {}).keys() & previous.get("scenario_candidates", {}).keys()):
+        before_scenario = previous["scenario_candidates"][scenario]
+        after_scenario = current["scenario_candidates"][scenario]
+        for direction in ("adds", "dels"):
+            before_codes = {r["code"] for r in before_scenario[direction]}
+            after_codes = {r["code"] for r in after_scenario[direction]}
+            if before_codes != after_codes:
+                result["scenario_changes"].append({"scenario_id": scenario, "direction": direction,
+                    "new": sorted(after_codes - before_codes), "removed": sorted(before_codes - after_codes)})
     before = {(r["key"], r["code"]): r for r in previous["candidates"]}
     after = {(r["key"], r["code"]): r for r in current["candidates"]}
     for keys, source, change in ((after.keys() - before.keys(), after, "new"),
@@ -82,7 +114,13 @@ def compare_snapshots(current, previous=None):
 def prepare_changes(analysis, flows, directory):
     snapshot = daily_snapshot(analysis, flows)
     prior_paths = sorted(p for p in directory.glob("????-??-??.json") if p.stem < snapshot["date"])
-    previous = json.loads(prior_paths[-1].read_text(encoding="utf-8")) if prior_paths else None
+    if prior_paths:
+        day = prior_paths[-1].stem
+        revisions = list((directory / "revisions").glob(f"{day}_*.json"))
+        saved = [(json.loads(p.read_text(encoding="utf-8")), p.stat().st_mtime_ns) for p in [prior_paths[-1], *revisions]]
+        previous = max(saved, key=lambda item: (item[0].get("generated", ""), item[1]))[0]
+    else:
+        previous = None
     return compare_snapshots(snapshot, previous), snapshot
 
 
@@ -90,6 +128,28 @@ def atomic_text(path, text):
     temp = path.with_suffix(path.suffix + ".tmp")
     temp.write_text(text, encoding="utf-8")
     temp.replace(path)
+
+
+def save_daily_snapshot(directory, snapshot):
+    """Preserve a frozen day's first observation; new calculations get content keys."""
+    directory.mkdir(parents=True, exist_ok=True)
+    primary = directory / f"{snapshot['date']}.json"
+    if not primary.exists():
+        atomic_text(primary, json.dumps(snapshot, ensure_ascii=False, allow_nan=False))
+        return primary
+    def identity(value):
+        return json.dumps({k: v for k, v in value.items() if k != "generated"},
+                          ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":"))
+    existing = json.loads(primary.read_text(encoding="utf-8"))
+    content = identity(snapshot)
+    if identity(existing) == content:
+        return primary
+    revision_dir = directory / "revisions"
+    revision_dir.mkdir(exist_ok=True)
+    revision = revision_dir / f"{snapshot['date']}_{hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]}.json"
+    if not revision.exists():
+        atomic_text(revision, json.dumps(snapshot, ensure_ascii=False, allow_nan=False))
+    return revision
 
 
 def main():
@@ -144,9 +204,7 @@ def main():
     atomic_text(DIST / "data.json", data_json)
     atomic_text(DIST / "index.html", html)
     atomic_text(DIST / ".nojekyll", "")
-    snapshots = DATA / "daily_snapshots"
-    snapshots.mkdir(exist_ok=True)
-    atomic_text(snapshots / f"{snapshot['date']}.json", json.dumps(snapshot, ensure_ascii=False, allow_nan=False))
+    save_daily_snapshot(DATA / "daily_snapshots", snapshot)
     print(f"built dist/index.html ({len(html)//1024} KB), data.json ({len(js)//1024} KB)")
     for warning in quality["warnings"]:
         print(f"  ! {warning}")

@@ -61,9 +61,33 @@
   "as_of": "2026-10-23",
   "fx": {
    "status": "ok",
-   "as_of": "2026-10-26T10:42:54+09:00",
+   "as_of": "2026-10-26T13:07:22+09:00",
    "source": "Naver FX_USDKRW",
-   "fetched_at": "2026-10-26T10:45:05+09:00"
+   "fetched_at": "2026-10-26T13:09:52+09:00"
+  },
+  "security_types": {
+   "status": "ok",
+   "observed_at": "2026-10-26",
+   "age_days": 0,
+   "scope": "current_reference_metadata",
+   "records": 4408,
+   "sources": {
+    "KOSPI": {
+     "url": "https://new.real.download.dws.co.kr/common/master/kospi_code.mst.zip",
+     "sha256": "ee9d57763f71673f5a8fcabf82b4506d93d989259d1251dfdf92eea15d4e1aed",
+     "schema_url": "https://github.com/koreainvestment/open-trading-api/blob/main/stocks_info/kis_kospi_code_mst.py"
+    },
+    "KOSDAQ": {
+     "url": "https://new.real.download.dws.co.kr/common/master/kosdaq_code.mst.zip",
+     "sha256": "ee47621b7b0e3701019848c9f8a5a214688958174535d704d5bff73ca8ca5113",
+     "schema_url": "https://github.com/koreainvestment/open-trading-api/blob/main/stocks_info/kis_kosdaq_code_mst.py"
+    }
+   },
+   "verified_universe_rows": 2766,
+   "unverified_count": 0,
+   "unverified": [],
+   "collection_status": null,
+   "warnings": []
   },
   "universe": {
    "version": 1,

@@ -300,9 +300,9 @@ $('#hdr-sub').textContent = `데이터 ${A.generated} 생성 · 시세 ${fmt.dat
 /* ---------- 패시브 플로우 모델 (KOSPI200/KOSDAQ150 탭) ---------- */
 function flowModel(idx, aumEok){
   // The browser scales the engine's frozen rows; it never derives another FIF or ADV.
-  if(idx.classification_scenario && idx.classification_scenario!=='GICS') return null;
-  const key=['kospi200','kosdaq150'].find(k=>A[k]===idx);
-  const event=D.flows?.events.find(e=>e.key===key);
+  if(idx.classification?.scheme==='KRICS'||(idx.classification_scenario && idx.classification_scenario!=='GICS')) return null;
+  const key=['kospi200','kosdaq150'].find(k=>A[k]===idx||Object.values(A[k]?.smallcap_scenarios||{}).includes(idx));
+  const event=krxFlowEvent(key,'GICS',idx.small_cap_policy||'applied');
   if(!event||event.availability==='hold'||!(event.notional_total>0)||!Number.isFinite(aumEok)||aumEok<0) return null;
   const rows=new Map(event.rows.map(r=>[r.code,r])), scale=aumEok/event.notional_total;
   const row=u=>rows.get(u.code);
@@ -389,6 +389,7 @@ function renderHist(){
     $('#hist-detail').innerHTML=`<div class="card"><div class="hd"><div><div class="eyebrow">상세 · ${a?'실제 결과 대조':'실제 결과 대기'}</div><h2>${esc(h.name)} <span class="muted" style="font-weight:500;font-size:13px">적용 ${esc(h.apply)} · 매매 ${esc(h.trade_date)} 종가 · 비중 확정 ${esc(h.fix||'-')}</span></h2>
         <p class="sub">스냅샷: ${esc(h.snapshot.generated)} 계산 (PDF ${esc(h.snapshot.pdf_date)}${h.snapshot.data_through?', 시세 '+fmt.date(h.snapshot.data_through):''}) · 총 추종명목 ${fmt.eokv(h.notional_total)} (${h.etfs.map(e=>esc(e.name)).join(' · ')})${a?` · 실제: PDF ${esc(a.pdf_date)} 기준, ${esc(a.computed)} 대조`:' · 매매 후 PDF가 들어오면 자동 대조'}</p></div>
         ${keys.length>1?`<div class="r"><div class="seg" id="hist-sc">${keys.map(k=>`<button data-v="${k}" class="${k===cur?'on':''}">${esc(short[k]||k)}</button>`).join('')}</div></div>`:''}</div>
+      ${Object.keys(h.held_scenarios||{}).length?`<div class="callout">금액 예측 HOLD: ${Object.entries(h.held_scenarios).map(([id,v])=>esc(id)+' · '+esc((v.hold_reasons||[]).map(r=>r.message||r).join(' / '))).join('<br>')}<br>보류된 시나리오는 0원 예측이나 적중률로 저장하지 않습니다.</div>`:''}
       <div class="callout" id="hist-desc"></div>
       <div id="hist-sum" style="margin-top:12px"></div>
       ${note('보관·대조 방법', `<b>보관</b>: 매매일 아침 갱신 결과(직전 영업일 PDF = 매매 전 포트폴리오)를 파일로 동결하고 이후 갱신에서 덮어쓰지 않습니다. <b>실제</b>: 매매 후 프록시 ETF PDF와 스냅샷 PDF의 비중 차이(직전 PDF는 새 PDF 기준일 종가로 드리프트 보정) × 총 추종명목. 지수 실제 비중이 아니라 ETF 실물 PDF 기준이므로 현금·선물·추적오차만큼 차이가 납니다. <b>방향 일치</b>: 예측 또는 실제 Δ가 0.05%p 이상인 종목 중 부호가 같은 비율. <b>규칙</b>: ${esc(h.rules||'')}`)}
@@ -456,13 +457,14 @@ function krxBasisBadge(key){
 }
 function krxTransitionNotice(){
   const comparisons=['kospi200','kosdaq150'].map(k=>[k,A[k]?.classification_scenarios]).filter(([,v])=>v);
-  if(comparisons.length) return note('KRICS 비교 시나리오 · 적용 시점 HOLD', `<b>같은 시장 입력에서 산업군만 바꾼 GICS / KRICS-A / KRICS-B 비교입니다. 공식 확정 결과가 아닙니다.</b> 사용자 제공 분류표를 사용하며, 공식 세부 KRICS 코드·지주회사 예외를 모두 확인한 자료가 아닙니다. 개정 시행일은 별도 확인 전까지 HOLD입니다. 10월 최종 거래일까지의 심사가 끝나기 전 입력은 잠정입니다. A는 1차선정 통과 후 신규 순위조건을 적용하고, B는 유동성과 신규 순위조건을 적용하는 별도 민감도입니다. 코스닥 300위 초과 제외는 거래소 재량을 적용한 가정입니다.<br>${comparisons.map(([k,c])=>`${esc(A[k].name||k)}: ${esc(c.status)} · 기준 ${esc(fmt.date(c.as_of||A.last_daily))}`).join('<br>')}<br>KOSPI 100·코스피200 IT의 기존 수급과 KRICS 비교 수급은 같은 결과로 간주하지 않습니다.`);
+  if(comparisons.length) return note('KRICS 비교 시나리오 · 적용 시점 HOLD', `<b>같은 시세 관측값에서 GICS / KRICS-A / KRICS-B를 각각 심사한 비교입니다. 공식 확정 결과가 아닙니다.</b> KRICS는 GICS 분류 존재 여부와 독립적으로 적격 후보를 구성하므로 입력 종목 수가 다를 수 있습니다. 원시 시세가 없는 종목은 임의로 보충하지 않습니다. 사용자 제공 분류표를 사용하며 공식 세부 KRICS 코드·지주회사 예외를 모두 확인한 자료가 아닙니다. 개정 시행일은 별도 확인 전까지 HOLD입니다. 10월 최종 거래일까지의 심사가 끝나기 전 입력은 잠정입니다. A/B는 신규 순위조건의 해석이고, 코스닥 300위 초과 재량 제외 적용/미적용은 별도 선택입니다.<br>${comparisons.map(([k,c])=>`${esc(A[k].name||k)}: ${esc(c.status)} · 기준 ${esc(fmt.date(c.as_of||A.last_daily))}`).join('<br>')}<br>KOSPI 100·코스피200 IT의 기존 수급과 KRICS 비교 수급은 같은 결과로 간주하지 않습니다.`);
   const transition=KB.kospi200?.classification_transition||KB.kosdaq150?.classification_transition;
   if(!transition?.pending||!['kospi200','kosdaq150'].some(key=>krxBasisBadge(key))) return '';
   return note('참고 · KRICS 산업분류 전환 예정', `<b>현재 예측은 현행 GICS 산업분류와 선정 기준으로 계산합니다.</b> KRICS는 종목별 공식 분류 확인 전까지 참고사항으로 안내하며, 계산에 반영하지 않았습니다.<br>KRICS ${fmt.n(transition.sector_count)}개 산업군 방법론 적용 예정 ${esc(transition.effective_date)} · 종목별 분류 공표 예정 ${esc(transition.classification_expected_date)}. 공식 분류·개정 방법론 확인 후 KOSPI 200·KOSDAQ 150과 관련 수급, KOSPI 100·코스피200 IT를 재검토해야 합니다.<br>${(transition.sources||[]).map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)} →</a>`).join(' · ')}`);
 }
 function krxScenarioNotice(idx){
   const rule=idx.smallcap_rule;
+  if(idx.small_cap_policy==='not_applied') return '<div class="callout"><b>300위 초과 재량 제외 미적용</b><br>일반 1·2·3차 선정 결과입니다. 300위 초과 종목의 제외 여부는 거래소 재량이며, 이 선택은 신규 A/B 해석과 독립적입니다.</div>';
   if(!rule?.applied) return '';
   const names=rows=>(rows||[]).map(u=>`${stockLink(u.name,u.code)} (${fmt.n(u.market_mcap_rank)}위)`).join(', ')||'없음';
   return `<div class="callout"><b>${fmt.n(rule.threshold_rank)}위 초과 제외를 적용한 추정 시나리오</b><br>코스닥 보통주 전체의 심사기간 일평균시총 순위 기준입니다. 거래소가 적용 여부를 판단하는 재량 조항으로, 공식 확정 결과가 아닙니다.<br>일반 선정 규칙: 편입 ${fmt.n(rule.base_adds)} · 편출 ${fmt.n(rule.base_dels)} → 재량 제외 적용: 편입 ${idx.adds.length} · 편출 ${idx.dels.length}<br>추가 제외: ${names(rule.removed)}<br>대체 선정: ${names(rule.replacements)}${rule.unreplaced?.length?`<br><b>유동성 충족 대체 후보 부족: ${rule.unreplaced.length}종목</b>`:''}</div>`;
@@ -475,30 +477,55 @@ function comparisonCounts(idx){
   const c=idx.classification_scenarios;
   if(!c) return '';
   if(c.status!=='ready') return '<div class="s">KRICS 비교 HOLD</div>';
-  return '<div class="s">'+Object.entries(c.scenarios||{}).map(([k,v])=>'KRICS-'+esc(k)+': '+v.adds.length+' IN / '+v.dels.length+' OUT').join(' · ')+'<br>동일 입력 모의 산출 · 시행일 HOLD</div>';
+  const policies=c.smallcap_scenarios;
+  if(policies) return '<div class="s">'+Object.entries(policies).map(([policy,scenarios])=>'300위 '+(policy==='applied'?'적용':'미적용')+' · '+Object.entries(scenarios).map(([k,v])=>'KRICS-'+esc(k)+': '+v.adds.length+' IN / '+v.dels.length+' OUT').join(' · ')).join('<br>')+'<br>독립 심사대상 모의 산출 · 시행일 HOLD</div>';
+  return '<div class="s">'+Object.entries(c.scenarios||{}).map(([k,v])=>'KRICS-'+esc(k)+': '+v.adds.length+' IN / '+v.dels.length+' OUT').join(' · ')+'<br>모의 산출 · 시행일 HOLD</div>';
 }
-function classificationComparison(key, selected){
+function krxResult(key,scenario='GICS',policy='applied'){
+  const base=A[key];
+  if(scenario==='GICS') return base?.smallcap_scenarios?.[policy]||(policy==='applied'?base:null);
+  const c=base?.classification_scenarios;
+  if(c?.status!=='ready') return null;
+  return c.smallcap_scenarios?.[policy]?.[scenario]||(policy==='applied'?c.scenarios?.[scenario]:null);
+}
+function krxFlowEvent(key,scenario='GICS',policy='applied'){
+  const base=D.flows?.events.find(e=>e.key===key);
+  if(key==='kosdaq150') return base?.scenario_flows?.[`${scenario}:${policy}`]||(scenario==='GICS'&&policy==='applied'?base:null);
+  return scenario==='GICS'?base:null;
+}
+function krxInputNotice(key,idx){
+  if(key!=='kosdaq150') return '';
+  const missing=idx.missing_review_data||A[key].missing_review_data||[];
+  const c=A[key].classification_scenarios,extra=c?.coverage?.additional_review_names||[];
+  const names=rows=>rows.map(r=>stockLink(r.name,r.code)).join(', ')||'없음';
+  return `<div class="callout"><b>입력자료 확인 사항</b><br>CHECK 결측은 공식 결격 판정이 아닙니다. 메지온·하이젠알앤엠 등을 결측만으로 제외하지 않습니다. 평균시총의 공급자별 차이는 일별 시총·가격·주식수 원장 확인 전 미확인입니다.<br>GICS 미분류에서 복원한 KRICS 심사대상: ${names(extra)}. 원시 평균 관측이 없어 심사에 넣지 못한 후보 ${missing.length}개: ${names(missing.slice(0,6))}${missing.length>6?` 외 ${missing.length-6}개${note('원시 관측 누락 후보 전체',names(missing))}`:'.'}${A.last_daily==='20261023'?'<br>보조 비교: <a href="https://allaboutmarket.kr/reports/75de8ac4" target="_blank" rel="noopener">10/23 CHECK 입력 보고서의 13편입·13편출</a>은 CHECK 결측 제외 가정·별도 평균시총·300위 제외 미적용에서 재현됩니다. 현재 선택의 운영 입력 결과를 그 숫자에 맞추지 않습니다.':''}</div>`;
+}
+function classificationComparison(key, selected, policy='applied'){
   const base=A[key], comparison=base.classification_scenarios;
-  if(!comparison) return '';
-  if(comparison.status!=='ready') return `<div class="callout"><b>KRICS 비교 HOLD</b><br>${esc(JSON.stringify(comparison.hold_reasons||comparison.reason||'분류 입력 확인 필요'))}</div>`;
-  const entries=[['GICS',base],...Object.entries(comparison.scenarios||{})];
+  if(!comparison&&!base.smallcap_scenarios) return '';
+  const policies=base.smallcap_scenarios?['applied','not_applied']:['applied'];
+  const schemes=comparison?.status==='ready'?['GICS',...Object.keys(comparison.scenarios||{})]:['GICS'];
+  const entries=policies.flatMap(p=>schemes.map(id=>[id,p,krxResult(key,id,p)]).filter(([, ,v])=>v));
   const names=rows=>(rows||[]).map(u=>stockLink(u.name,u.code)).join(', ')||'없음';
   const changes=(prior,next)=>next.filter(u=>!new Set(prior.map(r=>r.code)).has(u.code));
-  return `<div class="card" style="margin-bottom:14px"><h2>동일 입력 분류 비교</h2><p class="sub">기준 ${esc(fmt.date(comparison.as_of||A.last_daily))} · 산업군만 변경 · 공식 확정 아님 · 시행일 HOLD</p><div class="tbl"><table><thead><tr><th class="l">시나리오</th><th>편입</th><th>편출</th><th>선정</th><th class="l">새 편입 후보 / 기존 편입 후보에서 제외</th><th class="l">새 편출 후보 / 기존 편출 후보에서 제외</th></tr></thead><tbody>${entries.map(([id,v])=>`<tr><td class="l">${esc(id==='GICS'?'기존 GICS':'KRICS-'+id)}</td><td>${v.adds.length}</td><td>${v.dels.length}</td><td>${v.n_selected}</td><td class="l wrap">${id==='GICS'?names(v.adds):`<b class="muted xs">새 후보</b> ${names(changes(base.adds,v.adds))}<hr><b class="muted xs">후보 제외</b> ${names(changes(v.adds,base.adds))}`}</td><td class="l wrap">${id==='GICS'?names(v.dels):`<b class="muted xs">새 후보</b> ${names(changes(base.dels,v.dels))}<hr><b class="muted xs">후보 제외</b> ${names(changes(v.dels,base.dels))}`}</td></tr>`).join('')}</tbody></table></div><label class="small">상세 시나리오 <select id="${key}-scenario">${entries.map(([id])=>`<option value="${esc(id)}"${selected===id?' selected':''}>${esc(id==='GICS'?'기존 GICS':'KRICS-'+id)}</option>`).join('')}</select></label>${note('분류 출처·검증 범위', `<pre style="white-space:pre-wrap">${esc(JSON.stringify({source:comparison.source,coverage:comparison.coverage,input_hash:comparison.input_hash,assumptions:comparison.assumptions},null,2))}</pre>`)}</div>`;
+  const hold=comparison?.status!=='ready'?`<div class="callout"><b>KRICS 비교 HOLD</b><br>${esc(JSON.stringify(comparison?.hold_reasons||comparison?.reason||'분류 입력 확인 필요'))}</div>`:'';
+  return `<div class="card" style="margin-bottom:14px"><h2>동일 입력 분류 비교</h2><p class="sub">기준 ${esc(fmt.date(comparison?.as_of||A.last_daily))} · 같은 관측값·분류별 독립 심사대상 · 공식 확정 아님 · 시행일 HOLD</p><p class="sub">A/B는 신규 선정조건의 해석입니다. ${key==='kosdaq150'?'300위 초과 제외는 적용 여부를 거래소가 정하는 재량 조항으로 별도 비교합니다. KRICS 행의 증감은 같은 300위 정책의 GICS 대비입니다.':'KRICS 행의 증감은 기존 GICS 대비입니다.'}</p>${hold}<div class="tbl"><table><thead><tr><th class="l">분류·신규 해석</th>${policies.length>1?'<th>300위 재량 제외</th>':''}<th>심사대상</th><th>편입</th><th>편출</th><th>선정</th><th class="l">새 편입 후보 / 기존 편입 후보에서 제외</th><th class="l">새 편출 후보 / 기존 편출 후보에서 제외</th></tr></thead><tbody>${entries.map(([id,p,v])=>{const reference=krxResult(key,'GICS',p)||base;return `<tr><td class="l">${esc(id==='GICS'?'기존 GICS':'KRICS-'+id)}</td>${policies.length>1?`<td>${p==='applied'?'적용':'미적용'}</td>`:''}<td>${v.n_universe}</td><td>${v.adds.length}</td><td>${v.dels.length}</td><td>${v.n_selected}</td><td class="l wrap">${id==='GICS'?names(v.adds):`<b class="muted xs">새 후보</b> ${names(changes(reference.adds,v.adds))}<hr><b class="muted xs">후보 제외</b> ${names(changes(v.adds,reference.adds))}`}</td><td class="l wrap">${id==='GICS'?names(v.dels):`<b class="muted xs">새 후보</b> ${names(changes(reference.dels,v.dels))}<hr><b class="muted xs">후보 제외</b> ${names(changes(v.dels,reference.dels))}`}</td></tr>`;}).join('')}</tbody></table></div><div class="row"><label class="small">상세 시나리오 <select id="${key}-scenario">${schemes.map(id=>`<option value="${esc(id)}"${selected===id?' selected':''}>${esc(id==='GICS'?'기존 GICS':'KRICS-'+id)}</option>`).join('')}</select></label>${policies.length>1?`<label class="small">300위 재량 제외 <select id="${key}-smallcap">${policies.map(p=>`<option value="${p}"${p===policy?' selected':''}>${p==='applied'?'적용':'미적용'}</option>`).join('')}</select></label>`:''}</div>${note('분류 출처·검증 범위', `<pre style="white-space:pre-wrap">${esc(JSON.stringify({source:comparison?.source,coverage:comparison?.coverage,input_hash:comparison?.input_hash,assumptions:comparison?.assumptions},null,2))}</pre>`)}</div>`;
 }
-function renderKrx(key, mount, scenario='GICS'){
+function renderKrx(key, mount, scenario='GICS', policy='applied'){
   const base=A[key];
-  const idx = scenario==='GICS'?base:base.classification_scenarios?.scenarios?.[scenario]||base;
-  const flowEvent=D.flows?.events.find(e=>e.key===key);
+  let idx=krxResult(key,scenario,policy);
+  if(!idx){scenario='GICS';idx=krxResult(key,scenario,policy)||base;}
+  const flowEvent=krxFlowEvent(key,scenario,policy);
   const aumDef = (flowEvent?.notional_total||A.tracking_aum[key]?.total_eok||0)/10000;
   const kb = KB[key];
   mount.innerHTML = `
-  ${classificationComparison(key,scenario)}
+  ${classificationComparison(key,scenario,policy)}
   <div class="card"><div class="hd"><div><div class="eyebrow">규칙 기반 예상 · ${fmt.md(idx.window.apply)} 적용 ${scenario==='GICS'?krxBasisBadge(key):'<span class="badge warn">KRICS-'+esc(scenario)+' · 모의 산출</span>'}</div><h2>${esc(idx.name)} 시뮬레이션</h2>
       <p class="sub">심사기준일 <b>${fmt.date(idx.window.ref_date)}</b> · 심사기간 ${fmt.date(idx.window.period_start)}~${fmt.date(idx.window.period_end)} 중 <b>${fmt.date(idx.data_through)}까지 집계</b> · 적용 <b>${idx.window.apply}</b> (선물만기 ${idx.window.expiry} 익영업일) · 결과 공표 예상 ${esc(idx.window.announce)} · 현 구성 ${idx.n_current} · 심사대상 ${idx.n_universe}</p></div>
       <div class="r"><label class="small muted">추종 명목(조원)</label><input type="number" min="0" id="${key}-aum" value="${aumDef}" step="0.5" style="width:90px"></div></div>
     ${scenario!=='GICS'?'<div class="callout">KRICS 편출입 민감도입니다. 분류와 공식 FFR·CAP 계수가 미확정이므로 이 시나리오의 매매 추정은 HOLD입니다.</div>':flowEvent?.availability==='hold'?'<div class="callout">수급 HOLD · '+esc((flowEvent.hold_reasons||[]).map(r=>r.message||r).join(' / '))+'</div>':''}
     ${krxScenarioNotice(idx)}
+    ${krxInputNotice(key,idx)}
     <div id="${key}-tables"></div>
     ${Array.isArray(idx.largecap_candidates)?note('대형주 특례 후보 · 최근 15매매일 평균시총 상위 50위', `최근 15매매일 관측이 완료된 전체 심사대상 종목을 비교한 미선정 후보 ${idx.largecap_candidates.length}종목입니다. 특례 편입은 자동 확정하지 않습니다.${idx.largecap_candidates.length?`<ul>${idx.largecap_candidates.map(u=>`<li>${nm(u.name,u.code)} · ${fmt.n(u.mcap15_rank)}위 · 15매매일 평균 ${fmt.eok(u.mcap15)}</li>`).join('')}</ul>`:''}`):''}
     ${note('규칙·추종자금 가정', `${esc(idx.rules)}.<br><b>산업군</b>: ${scenario==='GICS'?'기존 GICS · 미분류 ETF/WICS 보완':'사용자 제공 KRICS 9산업군표 · 공식 세부 분류 확인 필요'}.<br><b>확신도</b>: 산업군 순위 경계까지의 모형상 거리이며 공식 심사 확률이 아닙니다.<br><b>수급</b>: 전체 플로우 엔진의 같은 목표비중·드리프트 현재비중·ETF별 적용 명목·최근 20완료거래일 ADV를 사용합니다. 이 화면은 입력 명목에 비례해 같은 엔진 결과만 조정합니다. ETF AUM과 레버리지 적용 명목을 구분하며, 공식 FFR과 ETF 비중 역산 상대계수는 서로 다릅니다. HOLD는 0원 매매가 아닙니다.`)}
@@ -527,7 +554,9 @@ function renderKrx(key, mount, scenario='GICS'){
   };
   $(`#${key}-aum`).oninput=drawMain; drawMain();
   const scenarioSelect=$(`#${key}-scenario`);
-  if(scenarioSelect) scenarioSelect.onchange=()=>renderKrx(key,mount,scenarioSelect.value);
+  if(scenarioSelect) scenarioSelect.onchange=()=>renderKrx(key,mount,scenarioSelect.value,policy);
+  const policySelect=$(`#${key}-smallcap`);
+  if(policySelect) policySelect.onchange=()=>renderKrx(key,mount,scenario,policySelect.value);
   $(`#${key}-q`).oninput=drawAll; document.querySelectorAll(`#${key}-f button`).forEach(b=>b.onclick=()=>{document.querySelectorAll(`#${key}-f button`).forEach(x=>x.classList.toggle('on',x===b));f=b.dataset.v;drawAll();}); drawAll();
 }
 

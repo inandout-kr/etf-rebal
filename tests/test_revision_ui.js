@@ -29,6 +29,7 @@ for(const key of ['kospi200','kosdaq150']){
   assert.match(target.innerHTML,/KRICS-B/);
   assert.match(target.innerHTML,/공식 확정 아님/);
   assert.match(target.innerHTML,/시행일 HOLD/);
+  if(key==='kospi200')assert(!target.innerHTML.includes('300위 초과 제외는'));
   ui.context.renderKrx(key,target,'A');
   assert.match(target.innerHTML,/매매 추정은 HOLD/);
   assert.match(target.innerHTML,/KRICS 과거 검증 성적 없음/);

@@ -84,11 +84,32 @@ def from_semi(semi, holdings, generated):
 
 
 def from_flow(ev, holdings, generated):
-    if ev.get("availability") == "hold":
+    if ev.get("availability") == "hold" and not any(
+            value.get("availability") != "hold" for value in ev.get("scenario_flows", {}).values()):
         return None
     apply_end = ev.get("apply_end") or (ev.get("window") or {}).get("apply_end")
     start, trade, settle = event_dates(ev["apply"], apply_end)
     pdf = next(v for v in holdings.values() if v["etf_code"] == ev["proxy_etf"])
+    scenarios, held_scenarios = {}, {}
+    variants = ev.get("scenario_flows") or {"base": ev}
+    for scenario_id, variant in variants.items():
+        description = variant.get("target_src") or "가중 입력에 따른 예측"
+        if variant.get("availability") == "hold":
+            # A held monetary forecast is not an empty or zero-valued portfolio.
+            held_scenarios[scenario_id] = {"availability": "hold", "desc": description,
+                "small_cap_policy": variant.get("small_cap_policy"),
+                "hold_reasons": variant.get("hold_reasons", [])}
+            continue
+        scenarios[scenario_id] = {"desc": description,
+            "scenario_id": scenario_id, "small_cap_policy": variant.get("small_cap_policy"),
+            "adds": variant["adds"], "dels": variant["dels"],
+            "total_buy": variant["total_buy"], "total_sell": variant["total_sell"],
+            "rows": norm_rows(variant["rows"], "w_cur")}
+    if not scenarios:
+        return None
+    default_scenario = ev.get("scenario_id", "base")
+    if default_scenario not in scenarios:
+        default_scenario = next(iter(scenarios))
     return {
         "key": ev["key"], "name": ev["name"], "apply": ev["apply"], "apply_start": start, "trade_date": trade, "settle_date": settle,
         "fix": ev.get("fix"), "rules": f"목표 구성: {ev['target_src']} · {ev.get('note') or ''}", "proxy_etf": ev["proxy_etf"],
@@ -96,9 +117,7 @@ def from_flow(ev, holdings, generated):
                      "pre_trade": pdf["date"] < trade},
         "etfs": [{k: e.get(k) for k in ("code", "name", "aum_eok", "notional_eok")} for e in ev["etfs"]], "notional_total": ev["notional_total"],
         "pdf_rows": {r["code"]: r["weight"] for r in pdf["rows"] if r.get("code") and r.get("weight") is not None},
-        "default_scenario": "base",
-        "scenarios": {"base": {"desc": "공식 가중·캡 규칙 적용 예측", "adds": ev["adds"], "dels": ev["dels"], "total_buy": ev["total_buy"], "total_sell": ev["total_sell"],
-                               "rows": norm_rows(ev["rows"], "w_cur")}},
+        "default_scenario": default_scenario, "scenarios": scenarios, "held_scenarios": held_scenarios,
         "actual": None,
     }
 
