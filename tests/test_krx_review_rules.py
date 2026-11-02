@@ -1,6 +1,6 @@
 import sqlite3
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 import analyze
@@ -214,6 +214,36 @@ class RecentLargeCapIntegrationTests(unittest.TestCase):
         self.assertEqual(candidate["mcap15_n_days"], 14)
         self.assertIsNone(candidate["mcap15_rank"])
         self.assertNotIn("000051", {u["code"] for u in result["largecap_candidates"]})
+
+    def test_post_review_prices_do_not_move_review_mean_or_recent15_window(self):
+        before = self.run_index()
+        future = (datetime.strptime(self.days[-1], "%Y%m%d").date() + timedelta(days=10)).strftime("%Y%m%d")
+        self.con.executemany("INSERT INTO daily VALUES(?,?,?,?,?)", [
+            (code, future, 1e12 if code == "000001" else .00001, 1, 1e12)
+            for code in self.stocks])
+        with patch.object(analyze, "load_review_events", return_value=[]):
+            after = analyze.run_krx_index(self.con, self.stocks, self.holdings, "kospi200", self.cfg, {},
+                                          future, self.window)
+        fields = ("avg_mcap", "avg_trdval", "mcap15", "mcap15_n_days", "mcap15_rank", "market_mcap_rank", "status")
+        extract = lambda result: {r["code"]: {k: r[k] for k in fields} for r in result["all"]}
+        self.assertEqual(extract(before), extract(after))
+        self.assertEqual(after["data_through"], self.window["ref_date"])
+        self.assertEqual(after["review_as_of"], self.window["ref_date"])
+        self.assertEqual(after["price_data_through"], future)
+
+    def test_missing_latest_price_does_not_erase_a_completed_review_observation(self):
+        before = self.run_index()
+        future = (datetime.strptime(self.days[-1], "%Y%m%d").date() + timedelta(days=10)).strftime("%Y%m%d")
+        latest_stocks = {c: dict(st, review_ready=False, universe_active=True,
+                                price_status="missing", close=None, mktcap=None) for c, st in self.stocks.items()}
+        with patch.object(analyze, "load_review_events", return_value=[]):
+            after = analyze.run_krx_index(self.con, latest_stocks, self.holdings, "kospi200", self.cfg, {},
+                                          future, self.window)
+        self.assertEqual({r["code"] for r in before["all"]}, {r["code"] for r in after["all"]})
+        self.assertEqual({r["code"]: r["avg_mcap"] for r in before["all"]},
+                         {r["code"]: r["avg_mcap"] for r in after["all"]})
+        self.assertTrue(all(r["close"] is None for r in after["all"]))
+        self.assertEqual(after["review_universe_basis"], "current_membership_with_review_date_prices")
 
     def test_applied_small_cap_scenario_has_base_counts_and_discretionary_confidence(self):
         self.cfg["small_cap_exclusion"] = True

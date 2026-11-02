@@ -22,7 +22,7 @@ vm.runInContext(`Object.assign(A,${JSON.stringify(payload.analysis)});
 for(const key of ['kospi200','kosdaq150']){
   const target=ui.elements.get(key==='kospi200'?'tab-k200':'tab-kq150');
   const result=payload.analysis[key];
-  assert.equal(result.classification_scenarios.status,'ready');
+  assert(['ready','HOLD'].includes(result.classification_scenarios.status));
   ui.context.renderKrx(key,target);
   assert.match(target.innerHTML,/동일 입력 분류 비교/);
   assert.match(target.innerHTML,/KRICS-A/);
@@ -31,14 +31,19 @@ for(const key of ['kospi200','kosdaq150']){
   assert.match(target.innerHTML,/시행일 HOLD/);
   if(key==='kospi200')assert(!target.innerHTML.includes('300위 초과 제외는'));
   ui.context.renderKrx(key,target,'A');
-  assert.match(target.innerHTML,/매매 추정은 HOLD/);
-  assert.match(target.innerHTML,/KRICS 과거 검증 성적 없음/);
-  assert(!target.innerHTML.includes('편입 적중'));
-  assert(!ui.elements.get(key+'-tables').innerHTML.includes('패시브 매수'));
+  if(result.classification_scenarios.status==='ready'){
+    assert.match(target.innerHTML,/매매 추정은 HOLD/);
+    assert.match(target.innerHTML,/KRICS 과거 검증 성적 없음/);
+    assert(!target.innerHTML.includes('편입 적중'));
+    assert(!ui.elements.get(key+'-tables').innerHTML.includes('패시브 매수'));
+  }else{
+    assert.match(target.innerHTML,/KRICS-A · 최신 계산 HOLD/);
+    assert.match(target.innerHTML,/편출입·수급은 HOLD이며 0이 아닙니다/);
+  }
   // The select handler must switch the full candidate and sector tables, not merely a badge.
   const select=ui.elements.get(key+'-scenario');
   select.value='B';select.onchange();
-  assert.match(target.innerHTML,/KRICS-B · 모의 산출/);
+  assert.match(target.innerHTML,result.classification_scenarios.status==='ready'?/KRICS-B · 모의 산출/:/KRICS-B · 최신 계산 HOLD/);
 }
 ui.context.renderFlows();
 const flows=ui.elements.get('tab-flows').innerHTML;
@@ -51,7 +56,7 @@ assert(!ui.elements.get('tab-adhoc').innerHTML.includes('해당 산업군 예비
 ui.context.renderDash();ui.context.renderQuality();
 assert.match(ui.elements.get('tab-dash').innerHTML,/계산 가능한 이벤트만 · HOLD 제외/);
 assert(!ui.elements.get('tab-dash').innerHTML.includes('KRX 반도체는 시나리오 A 기준'));
-assert.match(ui.elements.get('tab-dash').innerHTML,/KRICS-A:/);
+assert.match(ui.elements.get('tab-dash').innerHTML,/KRICS-A/);
 assert.match(ui.elements.get('krx-transition').innerHTML,/적용 시점 HOLD/);
 
 const hold=payload.flows.events.find(e=>e.availability==='hold');

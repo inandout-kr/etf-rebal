@@ -16,6 +16,11 @@ class FrozenClassificationTests(unittest.TestCase):
         cls.analysis = json.loads((ROOT / "data/analysis.json").read_text(encoding="utf-8"))
         cls.payload, error = load_mapping(ROOT / "data/krics_mapping.json")
         assert error is None, error
+        # Deterministic legacy-contract fixture, without changing the producer
+        # file. Official-current time contracts have separate schema2 tests.
+        cls.payload = copy.deepcopy(cls.payload)
+        cls.payload["schema_version"] = 1
+        cls.payload["frozen_as_of"] = cls.analysis["kosdaq150"]["data_through"]
         cls.configs = {
             "kospi200": dict(name="KOSPI 200", market="KOSPI", N=200, cum=.85, liq=.85,
                              keep_buf=1.10, new_buf=.90, rules=cls.analysis["kospi200"]["rules"]),
@@ -108,8 +113,8 @@ class FrozenClassificationTests(unittest.TestCase):
         self.assertIn("0220W0", kp)
         self.assertIn("0013Y0", kq)
         self.assertIn("005930", kp)
-        self.assertEqual(len(kp), 826)
-        self.assertEqual(len(kq), 1733)
+        self.assertEqual(len(kp), self.payload["sources"]["kospi200"]["expected_records"])
+        self.assertEqual(len(kq), self.payload["sources"]["kosdaq150"]["expected_records"])
 
     def test_unaccounted_current_constituent_holds_comparison(self):
         base = self.base("kospi200")

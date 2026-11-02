@@ -38,6 +38,9 @@ Invoke-PythonStep -Arguments @("fetch_market.py")
 Write-Host "[1b] KRX official GICS classification..."
 Invoke-PythonStep -Arguments @("fetch_gics.py") -AllowFailure
 
+Write-Host "[1c] KRX official current KRICS classification..."
+Invoke-PythonStep -Arguments @("fetch_krics.py")
+
 Write-Host "[2/5] ETF holdings (wisereport CU)..."
 Invoke-PythonStep -Arguments @("fetch_holdings.py")
 

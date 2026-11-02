@@ -17,7 +17,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from classification_scenarios import classification_comparison, gics_smallcap_comparison, load_mapping
+from classification_scenarios import classification_comparison, gics_smallcap_comparison, load_collection_status, load_mapping
 from ipo_eligibility import assess_first15
 from calendar_events import CALENDAR_YEARS, next_cycle, review_availability, review_windows, events_upcoming
 from market_dates import anchor_stocks, completed_session_date, current_universe, korea_now, latest_completed_date, usable_fx
@@ -409,8 +409,13 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, w
     """KOSPI 200 / KOSDAQ 150 시뮬레이션"""
     win = window or next_cycle(key)
     as_of = as_of or latest_completed_date(con)
+    review_as_of = min(as_of, win["ref_date"], win["period_end"])
     market_stats = period_stats(con, win["period_start"], win["period_end"], as_of)
     stats = adjust_review_periods(con, market_stats, win["period_start"], win["period_end"], as_of, load_review_events())
+    # Keep completed-review price eligibility independent from a newer display
+    # price being absent. Membership remains the explicit current snapshot; no
+    # historical listing universe is invented here.
+    review_prices = anchor_stocks(con, stocks, review_as_of) if as_of > review_as_of else None
     market_ranks = market_common_ranks(stocks, stats, cfg["market"])
     cur = {r["code"] for r in holdings[cfg["proxy"]]["rows"] if r.get("code")}
     curw = {r["code"]: r.get("weight") for r in holdings[cfg["proxy"]]["rows"] if r.get("code")}
@@ -423,7 +428,11 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, w
         if st["market"] != cfg["market"] or not st["is_common"]:
             continue
         is_cur = code in cur
-        ok, why = eligible(st, win["ref_date"], is_cur=is_cur)
+        review_st = st
+        if review_prices is not None:
+            review_st = dict(st, review_ready=st.get("universe_active", True)
+                             and review_prices[code]["price_status"] == "current")
+        ok, why = eligible(review_st, win["ref_date"], is_cur=is_cur)
         ps = stats.get(code)
         if not ok:
             if is_cur:
@@ -449,7 +458,7 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, w
                 excluded.append({"code": code, "name": st["name"], "why": "산업군 미분류(WICS 없음)", "is_cur": True})
             continue
         univ.append(copy.deepcopy(row))
-    recent = recent_mcap_stats(con, 15, as_of)
+    recent = recent_mcap_stats(con, 15, review_as_of)
     for u in review_rows + univ:
         u["mcap15"] = recent.get(u["code"], {}).get("avg_mcap")
         u["mcap15_n_days"] = recent.get(u["code"], {}).get("n", 0)
@@ -457,6 +466,8 @@ def run_krx_index(con, stocks, holdings, key, cfg, sector_etf_map, as_of=None, w
     return {
         "key": key, "name": cfg["name"], "proxy_etf": holdings[cfg["proxy"]]["etf_code"], "proxy_date": holdings[cfg["proxy"]]["date"],
         "window": win, "data_through": max((s["last"] for s in stats.values()), default=None),
+        "review_as_of": review_as_of, "price_data_through": as_of,
+        "review_universe_basis": "current_membership_with_review_date_prices",
         "classification": {"scheme": "GICS", "status": "reference_pending_krics", "expected_scheme": "KRICS",
                            "effective_date_status": "HOLD", "official_result": False},
         "excluded_current": excluded,
@@ -722,10 +733,12 @@ def main():
     k200 = run_krx_index(con, stocks, holdings, "kospi200", cfg_k200, sector_etf_map, as_of, windows["kospi200"])
     kq150 = run_krx_index(con, stocks, holdings, "kosdaq150", cfg_kq150, {}, as_of, windows["kosdaq150"])
     krics_mapping, krics_error = load_mapping(DATA / "krics_mapping.json")
+    krics_collection = load_collection_status(DATA / "krics_collection.json")
     for index_result, config in ((k200, cfg_k200), (kq150, cfg_kq150)):
         review_rows = index_result.pop("_classification_review_rows")
         index_result["classification_scenarios"] = classification_comparison(
-            index_result, config, krics_mapping, select_krx_rows, load_error=krics_error, review_rows=review_rows)
+            index_result, config, krics_mapping, select_krx_rows, load_error=krics_error, review_rows=review_rows,
+            snapshot_now=now, collection_status=krics_collection)
     kq150["small_cap_policy"] = "applied"
     kq150["smallcap_scenarios"] = gics_smallcap_comparison(kq150, cfg_kq150, select_krx_rows)
     k100 = run_kospi100_50(k200, holdings)
@@ -789,6 +802,11 @@ def main():
         "fif": {k: round(v, 3) for k, v in fif.items()},
     }
     (DATA / "analysis.json").write_text(json.dumps(result, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    try:
+        from krics_history import save_last_good
+        save_last_good(result, DATA / "krics_last_good.json")
+    except (OSError, ValueError, TypeError, KeyError):
+        print("KRICS 마지막 정상 결과 보존 확인 필요; 이전 이력은 최신 값으로 덮어쓰지 않습니다.")
     print(f"KOSPI200: univ={k200['n_universe']} cur={k200['n_current']} sel={k200['n_selected']} adds={len(k200['adds'])} dels={len(k200['dels'])}")
     print("  adds:", [(u['name'], u['sector'], round(u['rank_ratio'] or 0, 2)) for u in k200['adds']])
     print("  dels:", [(u['name'], u['sector'], round(u['rank_ratio'] or 0, 2), u['status']) for u in k200['dels']])

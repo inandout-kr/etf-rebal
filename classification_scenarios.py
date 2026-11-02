@@ -9,7 +9,10 @@ import hashlib
 import json
 import re
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
+
+from market_dates import korea_now
 
 KRICS_SECTORS = frozenset(("에너지화학", "소재", "산업재", "모빌리티", "정보기술",
                            "금융 및 부동산", "소비재", "헬스케어", "미디어 및 콘텐츠"))
@@ -35,11 +38,98 @@ def load_mapping(path):
         return {}, f"KRICS 매핑 읽기 실패 ({type(exc).__name__}): 분류 입력을 확인하세요."
 
 
+def load_collection_status(path):
+    try:
+        result = json.loads(Path(path).read_text(encoding="utf-8"))
+        return result if isinstance(result, dict) else {"status": "HOLD"}
+    except (OSError, ValueError, TypeError):
+        return {"status": "HOLD", "errors": ["KRICS 공식 수집 상태를 확인할 수 없습니다."]}
+
+
+def official_snapshot_contract(payload, index_key, as_of, ref_date, price_date, now, collection):
+    """Current classification sensitivity; query quotes never prove historical membership."""
+    errors = []
+    dates = {"classification_date_status": "unverified", "current_snapshot_date": None,
+             "review_ref_date": ref_date, "requested_date": payload.get("requested_date"),
+             "classification_observed_at": payload.get("observed_at"), "returned_as_of": None,
+             "historical_asof_supported": False, "classification_valid_from": None,
+             "classification_valid_to": None, "date_warning": "공식 분류의 과거 효력일은 확인되지 않았습니다."}
+    try:
+        observed = datetime.fromisoformat(payload["observed_at"])
+        attempted = datetime.fromisoformat(collection["attempted_at"])
+        if observed.tzinfo is None or attempted.tzinfo is None:
+            raise ValueError("Timezone required")
+        observed, attempted, current = korea_now(observed), korea_now(attempted), korea_now(now)
+        query = datetime.strptime(payload["requested_date"], "%Y%m%d").date()
+        ref = datetime.strptime(ref_date, "%Y%m%d").date()
+        through = datetime.strptime(as_of, "%Y%m%d").date()
+        if (observed.date() != current.date() or attempted.date() != current.date()
+                or observed > current or attempted > current or observed > attempted
+                or query > observed.date() or through > query or through > ref
+                or payload["requested_date"] != price_date):
+            raise ValueError("Snapshot freshness or query condition mismatch")
+        if (payload.get("mode") != "official_current_snapshot" or payload.get("historical_asof_supported") is not False
+                or any(payload.get(k) is not None for k in ("returned_as_of", "valid_from", "valid_to"))):
+            raise ValueError("Unsupported historical classification claim")
+        if (not isinstance(collection, dict) or collection.get("schema_version") != 1
+                or collection.get("status") != "ok" or collection.get("snapshot_id") != payload.get("snapshot_id")
+                or collection.get("requested_date") != payload["requested_date"]):
+            raise ValueError("Collection is not the current verified cache")
+        records = payload["records"]
+        codes, groups, sectors = [], set(), set()
+        if not isinstance(records, list) or not records:
+            raise ValueError("Official records unavailable")
+        for row in records:
+            if (not isinstance(row, dict) or not isinstance(row.get("code"), str)
+                    or not re.fullmatch(r"[0-9A-Z]{6}", row["code"])
+                    or not isinstance(row.get("name"), str) or not row["name"].strip()
+                    or row.get("sector") not in KRICS_SECTORS
+                    or not re.fullmatch(r"\d{4}", row.get("group_code") or "")
+                    or row.get("sector_code") != row["group_code"][:2]
+                    or not isinstance(row.get("group"), str) or not row["group"]
+                    or row.get("market") not in ("KOSPI", "KOSDAQ", None)):
+                raise ValueError("Official record identity or levels invalid")
+            codes.append(row["code"])
+            groups.add(row["group_code"])
+            sectors.add(row["sector"])
+        validation = payload["validation"]
+        counts = validation["group_counts"]
+        if (len(codes) != len(set(codes)) or len(sectors) != 9 or not isinstance(counts, dict)
+                or len(counts) != 24 or not groups.issubset(counts)
+                or any(not isinstance(n, int) or isinstance(n, bool) or n < 0 for n in counts.values())
+                or sum(counts.values()) != len(records) or validation.get("official_records") != len(records)
+                or validation.get("sector_count") != 9 or validation.get("group_count") != 24
+                or validation.get("level1_union_verified") is not True or validation.get("summary_counts_verified") is not True):
+            raise ValueError("Official response validation incomplete")
+        actual_counts = Counter(row["group_code"] for row in records)
+        if any(actual_counts.get(g, 0) != n for g, n in counts.items()):
+            raise ValueError("Official group counts inconsistent")
+        identifier = stable_hash({"observed_at": payload["observed_at"], "requested_date": payload["requested_date"],
+                                  "records": sorted(records, key=lambda r: r["code"])})
+        if payload.get("snapshot_id") != identifier:
+            raise ValueError("Official snapshot integrity mismatch")
+        source = payload["sources"][index_key]
+        market = {"kospi200": "KOSPI", "kosdaq150": "KOSDAQ"}[index_key]
+        relevant = [r for r in sorted(records, key=lambda r: r["code"]) if r["market"] == market]
+        if (source.get("source_read_location") != "https://index.krx.co.kr/contents/MKD/03/0303/03030304/MKD03030304.jsp"
+                or source.get("source_id") != "krx_public_krics_level1_2"
+                or source.get("mapping") != [[r["code"], r["sector"]] for r in relevant]
+                or source.get("level2_mapping") != [[r["code"], r["group_code"], r["group"]] for r in relevant]
+                or source.get("source_sha256") != stable_hash(source["mapping"])):
+            raise ValueError("Official source mapping inconsistent")
+        date_status = "current_snapshot_after_review" if observed.date() > ref else "current_snapshot_during_review"
+        dates.update(classification_date_status=date_status, current_snapshot_date=observed.strftime("%Y%m%d"),
+                     date_warning=f"분류 관측 {observed:%Y-%m-%d} · 심사가격 {through:%Y-%m-%d}. 조회조건일은 시세 조건이며 과거 분류 효력일을 보장하지 않습니다. 현재 공식 분류 기준 민감도입니다.")
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        errors.append("KRICS 공식 스냅샷의 당일 수집·날짜·전체응답·캐시 결합 검증 실패; 이전 정상 결과와 구분합니다.")
+    return dates, errors
+
+
 def validate_mapping(payload, index_key, rows, as_of):
     errors = []
-    if payload.get("schema_version") != 1:
+    if payload.get("schema_version") not in (1, 2):
         errors.append("KRICS 매핑 형식 버전 확인 필요")
-    if payload.get("frozen_as_of") != as_of:
+    if payload.get("schema_version") == 1 and payload.get("frozen_as_of") != as_of:
         errors.append(f"고정 입력일 불일치: 매핑 {payload.get('frozen_as_of')}, 심사 {as_of}")
     sources = payload.get("sources", {})
     source = sources.get(index_key) if isinstance(sources, dict) else None
@@ -66,8 +156,6 @@ def validate_mapping(payload, index_key, rows, as_of):
             duplicates.append(code)
         mapping[code] = sector
     expected = source.get("expected_records")
-    if expected != {"kospi200": 826, "kosdaq150": 1733}.get(index_key):
-        errors.append("검토된 전체 KRICS 종목 수와 출처 메타데이터 불일치")
     if not isinstance(expected, int) or expected <= 0 or len(entries) != expected or len(mapping) != expected:
         errors.append(f"KRICS 전체 매핑 건수 불일치: 행 {len(entries)}, 고유 {len(mapping)}, 기대 {expected}")
     if duplicates:
@@ -129,7 +217,8 @@ def gics_smallcap_comparison(base_index, cfg, selector):
     return variants
 
 
-def classification_comparison(base_index, cfg, payload, selector, load_error=None, review_rows=None):
+def classification_comparison(base_index, cfg, payload, selector, load_error=None, review_rows=None,
+                              snapshot_now=None, collection_status=None):
     """Reclassify review-eligible rows before the optional GICS grouping filter.
 
     Prices, dates, liquidity and corporate-event observations stay fixed. A
@@ -142,6 +231,13 @@ def classification_comparison(base_index, cfg, payload, selector, load_error=Non
     baseline_codes = {r["code"] for r in baseline_rows}
     key, as_of = base["key"], base["data_through"]
     mapping, source, coverage, errors = validate_mapping(payload, key, rows, as_of)
+    date_fields = {}
+    official = payload.get("schema_version") == 2
+    if official:
+        date_fields, date_errors = official_snapshot_contract(
+            payload, key, as_of, base["window"]["ref_date"], base.get("price_data_through", as_of),
+            snapshot_now, collection_status)
+        errors.extend(date_errors)
     if load_error:
         errors.insert(0, load_error)
     review_codes = {r["code"] for r in rows}
@@ -153,7 +249,10 @@ def classification_comparison(base_index, cfg, payload, selector, load_error=Non
                     universe_completeness="incomplete" if base.get("missing_review_data") else "observed_rows_only")
     if baseline_codes - review_codes:
         errors.append("KRICS 공통 심사 입력에서 GICS 심사행이 누락되었습니다.")
-    source_metadata = {k: copy.deepcopy(v) for k, v in source.items() if k != "mapping"}
+    source_metadata = {k: copy.deepcopy(v) for k, v in source.items() if k not in ("mapping", "level2_mapping")}
+    if official:
+        source_metadata.update({k: copy.deepcopy(payload.get(k)) for k in
+                                ("observed_at", "requested_date", "returned_as_of", "historical_asof_supported", "valid_from", "valid_to", "snapshot_id")})
     input_fields = ("code", "name", "avg_mcap", "avg_trdval", "is_cur", "n_days", "review_start", "review_end",
                     "review_events", "market_mcap_rank", "mcap15", "mcap15_n_days", "listing_date")
     frozen_input = [{k: row.get(k) for k in input_fields} for row in sorted(rows, key=lambda r: r["code"])]
@@ -168,6 +267,10 @@ def classification_comparison(base_index, cfg, payload, selector, load_error=Non
                               "CHECK 결측을 공식 결격으로 간주하지 않으며 평균시총 원장 차이는 미확인",
                               "300위 재량제외 적용 여부는 신규편입 A/B 해석과 별도 축" if key == "kosdaq150" else
                               "KOSPI 현구성 수와 무관하게 정기선정 목표는 200종목"]}
+    result.update(date_fields)
+    if official:
+        result["assumptions"][2] = "KRX 공개 KRICS 1·2단계 당일 스냅샷. 과거 심사기준일의 분류 또는 공식 최종 편출입 결과가 아님"
+        result["assumptions"].append(date_fields["date_warning"])
     if errors:
         return result
     current = {r["code"] for r in rows if r["is_cur"]}
@@ -188,7 +291,7 @@ def classification_comparison(base_index, cfg, payload, selector, load_error=Non
             for row in scenario_rows:
                 row["gics_baseline_sector"] = row.get("sector")
                 row["sector"] = mapping[row["code"]]
-                row["sector_src"] = "첨부 KRICS 분류 (적용일 확인 대기)"
+                row["sector_src"] = "KRX 공개 현재 KRICS 분류 (과거 효력일 미확인)" if official else "첨부 KRICS 분류 (적용일 확인 대기)"
             clear_derived(scenario_rows)
             config = dict(cfg)
             if key == "kosdaq150":
@@ -212,6 +315,7 @@ def classification_comparison(base_index, cfg, payload, selector, load_error=Non
             scenario["rules"] += " · A: 1차선정 AND 신규순위" if requires_primary else " · B: 1차선정과 무관한 유동성 AND 신규순위"
             scenario.update(scenario_id=label, small_cap_policy=policy, official_result=False,
                             effective_date_status="HOLD", comparison_input_hash=result["input_hash"])
+            scenario.update(date_fields)
             selected_codes = {r["code"] for r in scenario["all"] if (r.get("status") or "").startswith(("유지", "신규편입"))}
             by_code = {r["code"]: r for r in baseline_rows + scenario["all"]}
             describe = lambda codes: [{"code": c, "name": by_code[c]["name"]} for c in sorted(codes)]

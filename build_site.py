@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from validate_data import parse_date, read_artifacts, validate_directory
+from krics_history import empty_history, read_last_good
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).parent
@@ -158,6 +159,11 @@ def main():
     a, etfs, kb, hold, semi, flows, backtest = (artifacts[k] for k in
         ("analysis", "etf_master", "methodology", "holdings", "krx_semi_rebal", "flows", "backtest_june"))
     a["data_quality"] = quality
+    try:
+        krics_history = read_last_good(DATA / "krics_last_good.json")
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        krics_history = empty_history()
+        krics_history["read_warning"] = f"KRICS 과거 계산 보관자료 확인 필요 ({type(exc).__name__})"
     changes, snapshot = prepare_changes(a, flows, DATA / "daily_snapshots")
     today = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
     if semi and semi["expiry"] < today:   # 매매 끝난 KRX 반도체 정기변경 → 히스토리 탭으로
@@ -189,6 +195,7 @@ def main():
             # Preserve every engine row, including null-valued HOLD fields.
             sc["rows"] = [{k: r.get(k) for k in keep if k in r} for r in sc["rows"]]
     payload = {"analysis": a, "etfs": etfs, "kb": kb, "members": members, "semi": semi, "flows": flows, "backtest": backtest, "history": history, "changes": changes,
+               "krics_history": krics_history,
                "proxy": {k: {"etf": v["etf_code"], "date": v["date"], "n": len(v["rows"])} for k, v in hold.items()}}
     html = (ROOT / "template.html").read_text(encoding="utf-8")
     if html.count("/*__DATA__*/null") != 1:
